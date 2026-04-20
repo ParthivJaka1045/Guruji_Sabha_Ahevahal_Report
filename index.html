@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="gu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>SMVS Report Portal</title>
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Vadodara:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap 5.3 + Quill Editor -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="css/style.css">
+
+    <!-- PWA / Mobile Meta -->
+    <meta name="theme-color" content="#0f1117">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+
+    <!-- ===== LOADER OVERLAY ===== -->
+    <div id="loader" class="d-none position-fixed top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center" style="z-index: 9999;">
+        <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status"></div>
+        <p class="mt-3 fw-bold text-primary mb-0" style="font-size: 0.95rem; letter-spacing: 1px;">PROCESSING...</p>
+    </div>
+
+    <!-- ===== PREVIEW MODAL ===== -->
+    <div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold mb-0"><i class="fa-solid fa-eye me-2 text-primary"></i>Report Preview</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div id="previewContent" class="p-3"></div>
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal"><i class="fa-solid fa-xmark me-1"></i> Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== LOGIN VIEW ===== -->
+    <div id="loginView" class="d-flex align-items-center justify-content-center">
+        <div class="card p-4 p-sm-5 mx-3 w-100" style="max-width: 420px;">
+            <div class="text-center mb-4">
+                <div class="icon-circle mx-auto mb-3 text-primary">
+                    <i class="fa-solid fa-user-shield fa-2x"></i>
+                </div>
+                <h4 class="fw-bold mb-1">SMVS Login</h4>
+                <p class="text-muted small mb-0">Secure access to Report Portal</p>
+            </div>
+            <form onsubmit="handleLogin(event)">
+                <div class="mb-3">
+                    <label class="form-label">Email ID</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fa-solid fa-envelope"></i></span>
+                        <input type="email" id="loginEmail" class="form-control" placeholder="name@smvs.org" required>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label">Password</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="fa-solid fa-lock"></i></span>
+                        <input type="password" id="loginPassword" class="form-control" placeholder="Enter password" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">
+                    <i class="fa-solid fa-right-to-bracket me-2"></i>Login Access
+                </button>
+            </form>
+            <div id="loginError" class="text-danger small text-center mt-3 d-none"></div>
+        </div>
+    </div>
+
+    <!-- ===== MAIN APP ===== -->
+    <div id="mainApp" class="d-none">
+
+        <!-- Navbar -->
+        <nav class="navbar sticky-top px-3">
+            <div class="container d-flex justify-content-between align-items-center">
+                <a class="navbar-brand" href="#" onclick="location.reload()">
+                    <i class="fa-solid fa-book-open"></i> Guruji Sabha Report
+                </a>
+                <button class="btn btn-sm btn-outline-danger" onclick="logoutUser()" title="Logout">
+                    <i class="fa-solid fa-power-off me-1"></i><span class="d-none d-sm-inline">Logout</span>
+                </button>
+            </div>
+        </nav>
+
+        <div class="container py-4">
+
+            <!-- ===== DASHBOARD VIEW ===== -->
+            <div id="dashboardView" class="animate-fade-in">
+                <div class="row g-4">
+                    <!-- Welcome Card -->
+                    <div class="col-12">
+                        <div class="card border-0">
+                            <div class="card-body p-4 text-center">
+                                <h4 class="fw-bold mb-1" style="color: var(--primary);">Jay Swaminarayan! 🙏</h4>
+                                <p class="text-muted mb-0">Select an option to start.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- New Report -->
+                    <div class="col-12 col-sm-6">
+                        <div class="card h-100 btn-card" onclick="showForm()">
+                            <div class="card-body p-4 p-md-5 text-center">
+                                <div class="icon-circle mb-3 mx-auto text-primary"><i class="fa-solid fa-plus fa-2x"></i></div>
+                                <h5 class="fw-bold mb-0" style="color: #fff;">Create New Report</h5>
+                                <small class="text-muted">(નવો રિપોર્ટ)</small>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- History -->
+                    <div class="col-12 col-sm-6">
+                        <div class="card h-100 btn-card" onclick="showHistory()">
+                            <div class="card-body p-4 p-md-5 text-center">
+                                <div class="icon-circle mb-3 mx-auto text-success"><i class="fa-solid fa-clock-rotate-left fa-2x"></i></div>
+                                <h5 class="fw-bold mb-0" style="color: #fff;">History</h5>
+                                <small class="text-muted">(જૂના રિપોર્ટ)</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== FORM VIEW ===== -->
+            <div id="formView" class="d-none animate-fade-in">
+                <!-- Top Nav -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button class="btn btn-link text-decoration-none text-muted ps-0" onclick="showDashboard()">
+                        <i class="fa-solid fa-arrow-left me-1"></i> Dashboard
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" onclick="resetForm(true)">
+                        <i class="fa-solid fa-rotate-right me-1"></i> Reset
+                    </button>
+                </div>
+
+                <form id="reportForm">
+                    <div class="row g-4">
+                        <!-- LEFT: Basic Details + Categories -->
+                        <div class="col-12 col-lg-5">
+                            <div class="card p-3 p-md-4 mb-3">
+                                <h6 class="section-title text-primary fw-bold border-bottom pb-2 mb-3">
+                                    <i class="fa-solid fa-file-lines me-2"></i>Basic Details (પાયાની વિગતો)
+                                </h6>
+                                <div class="row g-3">
+                                    <div class="col-6">
+                                        <label class="form-label">Date (તારીખ)</label>
+                                        <input type="date" id="date" class="form-control fw-bold" required>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label">Day (વાર)</label>
+                                        <input type="text" id="day" class="form-control" readonly>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label">Start (શરૂઆત)</label>
+                                        <input type="time" id="startTime" class="form-control" required>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label">End (પૂર્ણ)</label>
+                                        <input type="time" id="endTime" class="form-control" required>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Grade (ગ્રેડ)</label>
+                                        <div class="btn-group w-100">
+                                            <input type="radio" class="btn-check" name="grade" id="gradeA" value="A" checked>
+                                            <label class="btn btn-outline-primary" for="gradeA">A</label>
+                                            <input type="radio" class="btn-check" name="grade" id="gradeB" value="B">
+                                            <label class="btn btn-outline-primary" for="gradeB">B</label>
+                                            <input type="radio" class="btn-check" name="grade" id="gradeC" value="C">
+                                            <label class="btn btn-outline-primary" for="gradeC">C</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Occasion (પ્રસંગ)</label>
+                                        <input type="text" id="occasion" class="form-control" placeholder="Poonam, Sabha..." required>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Location (સ્થળ)</label>
+                                        <input type="text" id="location" class="form-control" placeholder="Enter location" required>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Divyavani (દિવ્યવાણી)</label>
+                                        <input type="text" id="divyavani" class="form-control" value="વ્હાલા ગુરુજી">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Subject (સભાનો વિષય)</label>
+                                        <textarea id="subject" class="form-control" rows="2" placeholder="Enter subject"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card p-3 p-md-4">
+                                <h6 class="section-title text-primary fw-bold border-bottom pb-2 mb-3">
+                                    <i class="fa-solid fa-tags me-2"></i>Categories (કેટેગરી)
+                                </h6>
+                                <div id="categoryContainer" class="category-list"></div>
+                            </div>
+                        </div>
+
+                        <!-- RIGHT: Rich Text Editor -->
+                        <div class="col-12 col-lg-7">
+                            <div class="card h-100 d-flex flex-column">
+                                <div class="card-header pt-3 px-3 px-md-4">
+                                    <h6 class="text-primary fw-bold mb-0">
+                                        <i class="fa-solid fa-pen-nib me-2"></i>Report Body (કથાવાર્તા અહેવાલ)
+                                    </h6>
+                                </div>
+                                <div class="card-body p-0 d-flex flex-column" style="min-height: 0;">
+                                    <div id="editor-container" style="flex-grow: 1; min-height: 400px; border:none;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bottom Action Bar -->
+                    <div class="fixed-bottom-action shadow-lg">
+                        <div class="container">
+                            <div id="createButtons">
+                                <div class="row g-2">
+                                    <div class="col-12 mb-1">
+                                        <button type="button" class="btn btn-outline-warning w-100 fw-bold" onclick="previewReport('form')">
+                                            <i class="fa-solid fa-eye me-2"></i> Preview Report
+                                        </button>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="btn-group w-100">
+                                            <button type="button" class="btn btn-outline-primary w-75 fw-bold" onclick="saveAndGenerate('word', 'download')"><i class="fa-solid fa-file-word me-1"></i> Word</button>
+                                            <button type="button" class="btn btn-outline-primary w-25" onclick="saveAndGenerate('word', 'share')" title="Share Word"><i class="fa-solid fa-share-nodes"></i></button>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="btn-group w-100">
+                                            <button type="button" class="btn btn-primary w-75 fw-bold" onclick="saveAndGenerate('pdf', 'download')"><i class="fa-solid fa-file-pdf me-1"></i> PDF</button>
+                                            <button type="button" class="btn btn-primary w-25" onclick="saveAndGenerate('pdf', 'share')" title="Share PDF"><i class="fa-solid fa-share-nodes"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="updateButtons" class="row g-2 d-none">
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-outline-warning w-100 fw-bold" onclick="previewReport('form')">
+                                        <i class="fa-solid fa-eye me-2"></i> Preview
+                                    </button>
+                                </div>
+                                <div class="col-6">
+                                    <button type="button" class="btn btn-success w-100 fw-bold" onclick="updateDataOnly()">
+                                        <i class="fa-solid fa-check me-2"></i> Update Data
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="height: 110px;"></div>
+                </form>
+            </div>
+
+            <!-- ===== HISTORY VIEW ===== -->
+            <div id="historyView" class="d-none animate-fade-in">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <button class="btn btn-link text-decoration-none text-muted ps-0" onclick="showDashboard()">
+                        <i class="fa-solid fa-arrow-left me-1"></i> Dashboard
+                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="showHistory()">
+                        <i class="fa-solid fa-rotate me-1"></i> Refresh
+                    </button>
+                </div>
+                <h4 class="fw-bold mb-3">Your Reports</h4>
+                <!-- Filters -->
+                <div class="card p-3 mb-4">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label">Filter by Date</label>
+                            <input type="date" id="filterDate" class="form-control" onchange="filterReports()">
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label class="form-label">Occasion</label>
+                            <input type="text" id="filterOccasion" class="form-control" placeholder="Search..." onkeyup="filterReports()">
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label class="form-label">Location</label>
+                            <input type="text" id="filterLocation" class="form-control" placeholder="Search..." onkeyup="filterReports()">
+                        </div>
+                    </div>
+                </div>
+                <!-- Report Cards -->
+                <div id="historyList" class="row g-3">
+                    <p class="text-center text-muted">Loading...</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://unpkg.com/html-docx-js/dist/html-docx.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="js/app.js"></script>
+
+</body>
+</html>

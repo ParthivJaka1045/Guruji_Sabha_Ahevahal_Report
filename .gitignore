@@ -1,0 +1,13 @@
+node_modules/
+*.zip
+.next/
+dist/
+out/
+.vscode/
+*.log
+reports.sqlite
+smvs_secure.sqlite
+functions/node_modules/
+functions/.env*
+functions/.runtimeconfig.json
+

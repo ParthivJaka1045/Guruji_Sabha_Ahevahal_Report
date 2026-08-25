@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "vite",
+    "build": "vite build && node -e \"const fs=require('fs');fs.mkdirSync('dist/css',{recursive:true});fs.mkdirSync('dist/assets',{recursive:true});fs.copyFileSync('css/style.css','dist/css/style.css');fs.copyFileSync('assets/smvs-logo.png','dist/assets/smvs-logo.png');console.log('Build complete with assets!');\"",
+    "preview": "vite preview",
+    "start": "node server.js"
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
@@ -42,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^5.0.0"
   }
 }

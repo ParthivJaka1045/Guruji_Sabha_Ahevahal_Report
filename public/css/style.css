@@ -400,17 +400,25 @@ textarea.form-control { resize: vertical; }
 }
 
 /* --- 12. FIXED BOTTOM ACTION BAR --- */
+#formView {
+    padding-bottom: 180px !important;
+}
+#formView form {
+    padding-bottom: 20px;
+}
+
 .fixed-bottom-action {
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(15,17,23,0.88);
-    backdrop-filter: blur(18px) saturate(140%);
-    -webkit-backdrop-filter: blur(18px) saturate(140%);
-    border-top: 1px solid var(--border);
+    background: rgba(11, 18, 32, 0.95);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border-top: 1px solid rgba(229, 142, 0, 0.25);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
     z-index: 1020;
-    padding: 14px 0 !important;
+    padding: 12px 0 !important;
 }
 
 /* --- 13. CATEGORIES --- */
@@ -678,6 +686,33 @@ a:hover { color: var(--primary-light); }
     border-radius: var(--radius-lg);
 }
 
+/* --- 18.1 MOBILE NAVBAR STYLING --- */
+.navbar-collapse {
+    background: rgba(17, 27, 46, 0.98);
+    backdrop-filter: blur(16px);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-top: 8px;
+    border: 1px solid var(--border);
+}
+@media (min-width: 992px) {
+    .navbar-collapse {
+        background: transparent !important;
+        backdrop-filter: none !important;
+        padding: 0 !important;
+        margin-top: 0 !important;
+        border: none !important;
+    }
+}
+.nav-link {
+    transition: all var(--transition);
+    font-weight: 500;
+}
+.nav-link:hover {
+    background: rgba(229, 142, 0, 0.15) !important;
+    color: var(--primary) !important;
+}
+
 /* --- 19. RESPONSIVE TWEAKS --- */
 
 /* Tablets */
@@ -720,8 +755,8 @@ a:hover { color: var(--primary-light); }
     h5 { font-size: 1rem; }
     h6 { font-size: 0.88rem; }
 
-    #previewModal .modal-body { padding: 12px; }
-    #previewContent { padding: 10mm; min-height: auto; }
+    #previewModal .modal-body { padding: 12px; background: #242f40 !important; }
+    #previewContent { padding: 0; min-height: auto; background: #fff !important; }
     .public-report-wrap { padding: 14px; }
     .public-report-card { border-radius: 14px; }
     .public-report-header { padding: 14px 14px; }

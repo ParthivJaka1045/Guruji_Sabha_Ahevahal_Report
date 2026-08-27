@@ -1,6 +1,6 @@
 // ============================================
 // SMVS Report Portal — Firebase Production App
-// Powered by Firebase Auth, Firestore & Cloud Hosting
+// Powered by Firestore Database & Custom User Management
 // ============================================
 
 // --- 1. FIREBASE CONFIG & INITIALIZATION ---
@@ -13,12 +13,13 @@ const firebaseConfig = {
     appId: "1:780579541622:web:fa9843949311131e13c557"
 };
 
-firebase.initializeApp(firebaseConfig);
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
 const db = firebase.firestore();
-const auth = firebase.auth();
 
 // --- 1.1 INTEGRATIONS CONFIG (Option B: Apps Script + EmailJS) ---
-const APPS_SCRIPT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbx_hzxJrLXgnY_jJAwU9SKhFr7X11UjFp8SQIYHykNLQFvdr6YmsI1mo9iO5-B6WX0/exec";
+const APPS_SCRIPT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzdtJC9HbIKwYoyv3WsQkQojMHJI_ya3K46BvEmGagyGNBrp0TuvoxQZaIm47cuSlk/exec";
 const APPS_SCRIPT_TOKEN = "Smvs@2026#SheetSync!";
 
 const EMAILJS_PUBLIC_KEY = "RCTkUbi6HqVHM_A9s";
@@ -87,6 +88,38 @@ const defaultCategoriesData = {
 };
 
 // --- 3. FIRESTORE SEED & LOAD FUNCTIONS ---
+async function seedDefaultUsersIfNeeded() {
+    try {
+        const pskQuery = await db.collection("users").where("username", "==", "psk.assist@in.smvs.org").get();
+        if (pskQuery.empty) {
+            console.log("Seeding initial PSK Admin user to Firestore...");
+            await db.collection("users").add({
+                username: "psk.assist@in.smvs.org",
+                email: "psk.assist@in.smvs.org",
+                displayName: "PSK",
+                role: "admin",
+                password: "psk@2026",
+                isActive: true,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        const adminQuery = await db.collection("users").where("username", "==", "admin@smvs.org").get();
+        if (adminQuery.empty) {
+            await db.collection("users").add({
+                username: "admin@smvs.org",
+                email: "admin@smvs.org",
+                displayName: "SMVS Administrator",
+                role: "admin",
+                password: "Admin@2026",
+                isActive: true,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+    } catch (e) {
+        console.warn("User seeding note:", e);
+    }
+}
+
 async function loadLocationsTree() {
     try {
         const doc = await db.collection("locations_master").doc("tree").get();
@@ -137,10 +170,10 @@ async function saveCategoriesToFirestore() {
     }
 }
 
-// --- 4. AUTHENTICATION (FIREBASE AUTH) ---
+// --- 4. AUTHENTICATION VIA FIRESTORE 'users' COLLECTION ---
 window.handleLogin = async function(e) {
     if (e) e.preventDefault();
-    const email = document.getElementById("loginEmail").value.trim();
+    const userInput = document.getElementById("loginEmail").value.trim();
     const password = document.getElementById("loginPassword").value;
     const loginBtn = document.getElementById("loginBtn");
     const errorDiv = document.getElementById("loginError");
@@ -150,16 +183,67 @@ window.handleLogin = async function(e) {
     loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verifying...';
 
     try {
-        const userCred = await auth.signInWithEmailAndPassword(email, password);
+        console.log("Checking credentials in Firestore users collection for:", userInput);
+        
+        // Ensure initial user exists
+        await seedDefaultUsersIfNeeded();
+
+        // Check by username OR email
+        let userDoc = null;
+        let userData = null;
+
+        const snap1 = await db.collection("users").where("username", "==", userInput).get();
+        if (!snap1.empty) {
+            userDoc = snap1.docs[0];
+            userData = userDoc.data();
+        } else {
+            const snap2 = await db.collection("users").where("email", "==", userInput).get();
+            if (!snap2.empty) {
+                userDoc = snap2.docs[0];
+                userData = userDoc.data();
+            } else {
+                // Case-insensitive fallback
+                const allUsersSnap = await db.collection("users").get();
+                allUsersSnap.forEach(doc => {
+                    const d = doc.data();
+                    if ((d.username && d.username.toLowerCase() === userInput.toLowerCase()) || 
+                        (d.email && d.email.toLowerCase() === userInput.toLowerCase())) {
+                        userDoc = doc;
+                        userData = d;
+                    }
+                });
+            }
+        }
+
+        if (!userData) {
+            throw new Error("Username અથવા Email મળ્યો નથી! (User Not Found)");
+        }
+
+        if (userData.isActive === false) {
+            throw new Error("આ એકાઉન્ટ સસ્પેન્ડ/ઇનએક્ટિવ છે. એડમિનનો સંપર્ક કરો.");
+        }
+
+        if (userData.password !== password) {
+            throw new Error("પાસવર્ડ ખોટો છે! (Incorrect Password)");
+        }
+
         currentUser = {
-            uid: userCred.user.uid,
-            email: userCred.user.email,
-            username: userCred.user.email.split("@")[0],
-            role: (userCred.user.email.toLowerCase().includes("admin") || userCred.user.email.toLowerCase() === "jakasaniyaparthiv@gmail.com") ? "admin" : "user"
+            id: userDoc.id,
+            uid: userDoc.id,
+            username: userData.username,
+            email: userData.email || userData.username,
+            displayName: userData.displayName || userData.fullName || userData.username,
+            role: (userData.role || "user").toLowerCase()
         };
+
+        // Save session in localStorage
+        localStorage.setItem("smvs_active_user", JSON.stringify(currentUser));
+        console.log("Login Success! Logged in as:", currentUser.displayName, "(" + currentUser.role + ")");
+
         onLoginSuccess();
     } catch (err) {
-        errorDiv.textContent = err.message || "Invalid Email or Password!";
+        console.error("Login failed:", err);
+        errorDiv.textContent = err.message || "Invalid Username or Password!";
         errorDiv.classList.remove("d-none");
     } finally {
         loginBtn.disabled = false;
@@ -168,11 +252,9 @@ window.handleLogin = async function(e) {
     return false;
 };
 
-window.logoutUser = async function() {
+window.logoutUser = function() {
     if (!confirm("Are you sure you want to Logout?")) return;
-    try {
-        await auth.signOut();
-    } catch (e) {}
+    localStorage.removeItem("smvs_active_user");
     currentUser = null;
     showLoginView();
 };
@@ -223,15 +305,26 @@ async function onLoginSuccess() {
     document.getElementById("mainApp").classList.remove("d-none");
 
     const badge = document.getElementById("userBadge");
-    if (badge) {
-        badge.textContent = `@${currentUser.username} (${currentUser.role})`;
-    }
-
+    const drawerBadge = document.getElementById("drawerUserBadge");
+    const adminDrawerBtn = document.getElementById("adminDrawerBtn");
     const adminNavBtn = document.getElementById("adminNavBtn");
+
+    const badgeText = `${currentUser.displayName || currentUser.username} (${currentUser.role.toUpperCase()})`;
+    if (badge) badge.textContent = badgeText;
+    if (drawerBadge) drawerBadge.textContent = badgeText;
+
     if (currentUser.role === "admin") {
         if (adminNavBtn) adminNavBtn.classList.remove("d-none");
+        if (adminDrawerBtn) {
+            adminDrawerBtn.classList.remove("d-none");
+            adminDrawerBtn.classList.add("d-flex");
+        }
     } else {
         if (adminNavBtn) adminNavBtn.classList.add("d-none");
+        if (adminDrawerBtn) {
+            adminDrawerBtn.classList.add("d-none");
+            adminDrawerBtn.classList.remove("d-flex");
+        }
     }
 
     showLoader("LOADING PORTAL...");
@@ -255,20 +348,20 @@ async function onLoginSuccess() {
     }, 100);
 }
 
-// Monitor Firebase Auth state
-auth.onAuthStateChanged(user => {
-    if (user) {
-        currentUser = {
-            uid: user.uid,
-            email: user.email,
-            username: user.email.split("@")[0],
-            role: (user.email.toLowerCase().includes("admin") || user.email.toLowerCase() === "jakasaniyaparthiv@gmail.com") ? "admin" : "user"
-        };
-        onLoginSuccess();
-    } else {
-        showLoginView();
-    }
-});
+// Auto-restore session from localStorage on startup
+function checkSavedSession() {
+    try {
+        const saved = localStorage.getItem("smvs_active_user");
+        if (saved) {
+            currentUser = JSON.parse(saved);
+            if (currentUser && currentUser.username) {
+                onLoginSuccess();
+                return;
+            }
+        }
+    } catch (e) {}
+    showLoginView();
+}
 
 // --- 5. LOCATION DROPDOWNS (3-TIER: COUNTRY -> ZONE -> CENTER) ---
 function populateCountryDropdown() {
@@ -514,7 +607,7 @@ function scheduleDraftSave() {
     draftTimer = setTimeout(() => {
         try {
             const data = getFormData();
-            localStorage.setItem(`smvs_report_draft:${currentUser.uid}`, JSON.stringify({
+            localStorage.setItem(`smvs_report_draft:${currentUser.username}`, JSON.stringify({
                 savedAt: new Date().toISOString(),
                 data
             }));
@@ -524,12 +617,12 @@ function scheduleDraftSave() {
 
 function clearDraft() {
     if (!currentUser) return;
-    localStorage.removeItem(`smvs_report_draft:${currentUser.uid}`);
+    localStorage.removeItem(`smvs_report_draft:${currentUser.username}`);
 }
 
 function loadDraftIfAny() {
     if (!currentUser || currentReportId) return false;
-    const raw = localStorage.getItem(`smvs_report_draft:${currentUser.uid}`);
+    const raw = localStorage.getItem(`smvs_report_draft:${currentUser.username}`);
     if (!raw) return false;
     try {
         const payload = JSON.parse(raw);
@@ -676,8 +769,8 @@ async function saveAndGenerate(type, action) {
 
         const payload = {
             ...data,
-            authorUid: currentUser.uid,
-            authorEmail: currentUser.email,
+            authorUsername: currentUser.username,
+            authorDisplayName: currentUser.displayName,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         };
 
@@ -697,9 +790,9 @@ async function saveAndGenerate(type, action) {
         const fname = `${dayStr} ${monthStr}_${yearStr}_${data.occasion}_${data.location}`;
 
         if (type === "pdf") {
-            await handlePDF(data, fname, action);
+            await generatePDFDocument(data, fname, action);
         } else {
-            handleWord(data, fname, action);
+            generateWordDocument(data, fname, action);
         }
 
         // Background sync to Google Sheet
@@ -711,7 +804,7 @@ async function saveAndGenerate(type, action) {
         }
 
         await fetchReports();
-        alert("Report Saved Successfully to Cloud! 🎉");
+        alert("Report Saved Successfully! 🎉");
         showDashboard();
     } catch (e) {
         alert("Error saving report: " + e.message);
@@ -759,11 +852,24 @@ window.updateReportData = async function() {
 async function syncToGoogleSheet(reportId, data) {
     if (!APPS_SCRIPT_WEBAPP_URL) return;
     try {
-        const catText = Object.entries(data.categories || {})
-            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : ""}`)
-            .join(" | ");
+        let cats = data.categories || {};
+        if (typeof cats === "string") {
+            try { cats = JSON.parse(cats); } catch(e) { cats = {}; }
+        }
+        const catParts = [];
+        for (const [k, v] of Object.entries(cats)) {
+            const subStr = Array.isArray(v) ? v.join(", ") : String(v || "");
+            if (subStr) catParts.push(`${k}: ${subStr}`);
+            else catParts.push(k);
+        }
+        const catText = catParts.join(" | ") || "-";
 
-        const plainBody = (data.htmlBody || "").replace(/<[^>]+>/g, " ").trim();
+        let plainBody = "";
+        if (data.htmlBody) {
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = data.htmlBody;
+            plainBody = (tempDiv.innerText || tempDiv.textContent || "").trim();
+        }
 
         await fetch(APPS_SCRIPT_WEBAPP_URL, {
             method: "POST",
@@ -783,7 +889,9 @@ async function syncToGoogleSheet(reportId, data) {
                 location: data.location,
                 divyavani: data.divyavani,
                 subject: data.subject,
+                category: catText,
                 categories: catText,
+                reportNarrative: plainBody,
                 body: plainBody
             })
         });
@@ -809,106 +917,171 @@ async function sendEmailNotification(reportId, data) {
     }
 }
 
-// --- 10. CLEAN PREVIEW & EXPORT HTML GENERATORS ---
+// --- 10. PDF & WORD GENERATORS (WORD-MATCHING PDF FORMAT) ---
 function getCleanPreviewHTML(data, isForDownload = false) {
-    const formattedDate = data.date ? data.date.split("-").reverse().join("-") : "";
-    let catRows = "";
-    if (data.categories) {
-        for (const [main, subs] of Object.entries(data.categories)) {
-            if (subs && subs.length > 0) {
-                catRows += `<tr>
-                    <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; width:28%; font-size:11pt; background-color:#f9f9f9;">${main}</td>
-                    <td style="border:1px solid #999; padding:4px 8px; font-size:11pt;">${Array.isArray(subs) ? subs.join(", ") : subs}</td>
-                </tr>`;
+    if (!data) return "";
+
+    const dateParts = String(data.date || "").split("-");
+    const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : (data.date || "");
+
+    const startTime = data.startTime || data.start_time || "";
+    const endTime = data.endTime || data.end_time || "";
+    const htmlBody = data.htmlBody || data.html_body || "";
+    const subject = data.subject || "";
+    const occasion = data.occasion || "";
+    const location = data.location || "";
+    const day = data.day || "";
+    const grade = data.grade || "A";
+    const divyavani = data.divyavani || "વ્હાલા ગુરુજી";
+
+    let cats = data.categories || {};
+    if (typeof cats === "string") {
+        try { cats = JSON.parse(cats); } catch(e) { cats = {}; }
+    }
+    if (data.categories_json && typeof data.categories_json === "string") {
+        try { cats = JSON.parse(data.categories_json); } catch(e) {}
+    }
+
+    let catHtml = "";
+    if (cats && typeof cats === "object") {
+        for (const [main, subs] of Object.entries(cats)) {
+            const subList = Array.isArray(subs) ? subs.join(", ") : (subs || "");
+            if (subList) {
+                catHtml += `<div style="margin: 1px 0; font-size: 10pt;"><b>${main}:</b> ${subList}</div>`;
             }
         }
     }
+    if (!catHtml) catHtml = '<div style="margin: 1px 0; font-size: 10pt;">-</div>';
 
     return `
-    <div style="font-family:'Hind Vadodara', sans-serif; color:#000; background:#fff; padding:15px; max-width:800px; margin:0 auto; line-height:1.4;">
-        <div style="text-align:center; margin-bottom:12px;">
-            <h3 style="margin:0; color:#e58e00; font-size:16pt; font-weight:bold;">॥ શ્રી સ્વામિનારાયણો વિજયતે ॥</h3>
-            <h4 style="margin:4px 0 0 0; color:#000; font-size:13pt;">સત્સંગ પ્રવૃત્તિ કાર્યાલય (SMVS)</h4>
-            <div style="font-size:11pt; font-weight:bold; margin-top:2px;">સભા અહેવાલ</div>
-        </div>
+    <div id="pdfRenderRoot" style="font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; padding: 0; margin: 0 auto; color: #000000 !important; background: #ffffff !important; font-size: 10.5pt; width: 680px; box-sizing: border-box;">
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Hind+Vadodara:wght@400;500;600;700&display=swap');
+            #pdfRenderRoot, #pdfRenderRoot * {
+                font-family: 'Hind Vadodara', Arial, sans-serif !important;
+                box-sizing: border-box !important;
+                color: #000000 !important;
+            }
+            #pdfRenderRoot b, #pdfRenderRoot strong { font-weight: 700 !important; }
+            .hdr-table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                border: 1.5px solid #000000 !important;
+                margin: 0 !important;
+                box-sizing: border-box !important;
+            }
+            .hdr-table td {
+                border: 1px solid #000000 !important;
+                padding: 4px 7px !important;
+                vertical-align: top !important;
+                font-size: 10.5pt !important;
+                font-weight: 500 !important;
+                line-height: 1.4 !important;
+                box-sizing: border-box !important;
+            }
+            .hdr-title {
+                text-align: center !important;
+                padding: 8px 7px !important;
+                border-bottom: 1.5px solid #000000 !important;
+            }
+            .section-bar {
+                width: 100% !important;
+                background: #f0f0f0 !important;
+                font-weight: 700 !important;
+                font-size: 10.5pt !important;
+                padding: 5px 8px !important;
+                border-left: 1.5px solid #000000 !important;
+                border-right: 1.5px solid #000000 !important;
+                border-top: none !important;
+                border-bottom: 1px solid #000000 !important;
+                box-sizing: border-box !important;
+                margin: 0 !important;
+            }
+            .body-content {
+                width: 100% !important;
+                border-left: 1.5px solid #000000 !important;
+                border-right: 1.5px solid #000000 !important;
+                border-bottom: 1.5px solid #000000 !important;
+                border-top: none !important;
+                padding: 8px 10px !important;
+                text-align: justify !important;
+                line-height: 1.55 !important;
+                font-size: 10.5pt !important;
+                font-weight: 500 !important;
+                box-sizing: border-box !important;
+                margin: 0 !important;
+                min-height: 30px;
+            }
+            .body-content ul, .body-content ol {
+                padding-left: 20px !important;
+                margin: 3px 0 6px 0 !important;
+            }
+            .body-content li {
+                margin-bottom: 2px !important;
+                line-height: 1.5 !important;
+            }
+            .body-content p {
+                margin: 2px 0 !important;
+            }
+        </style>
 
-        <table style="width:100%; border-collapse:collapse; margin-bottom:12px; font-size:10.5pt;">
+        <!-- HEADER TABLE -->
+        <table class="hdr-table">
             <tr>
-                <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; width:15%; background-color:#f9f9f9;">તારીખ</td>
-                <td style="border:1px solid #999; padding:4px 8px; width:35%;">${formattedDate}</td>
-                <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; width:15%; background-color:#f9f9f9;">વાર</td>
-                <td style="border:1px solid #999; padding:4px 8px; width:35%;">${data.day || ""}</td>
+                <td colspan="2" class="hdr-title">
+                    <div style="font-size: 15pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; margin: 0;">SMVS SAMARPAN KARYALYA</div>
+                    <div style="font-size: 9pt; font-weight: 500; margin: 2px 0 0 0;">Video Post Production Data Report</div>
+                </td>
             </tr>
             <tr>
-                <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; background-color:#f9f9f9;">સમય</td>
-                <td style="border:1px solid #999; padding:4px 8px;">${data.startTime || ""} થી ${data.endTime || ""}</td>
-                <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; background-color:#f9f9f9;">ગ્રેડ</td>
-                <td style="border:1px solid #999; padding:4px 8px;">${data.grade || "A"}</td>
+                <td style="width: 50%;"><b>તારીખ:</b> ${formattedDate}</td>
+                <td style="width: 50%;"><b>વાર:</b> ${day}</td>
             </tr>
             <tr>
-                <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; background-color:#f9f9f9;">પ્રસંગ</td>
-                <td style="border:1px solid #999; padding:4px 8px;">${data.occasion || ""}</td>
-                <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; background-color:#f9f9f9;">સ્થળ</td>
-                <td style="border:1px solid #999; padding:4px 8px;">${data.location || ""}</td>
-            </tr>
-            ${!isForDownload && data.zone ? `
-            <tr>
-                <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; background-color:#f9f9f9;">ઝોન / સેન્ટર</td>
-                <td colspan="3" style="border:1px solid #999; padding:4px 8px;">${data.zone || ""} ${data.center ? " / " + data.center : ""}</td>
-            </tr>` : ""}
-            <tr>
-                <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; background-color:#f9f9f9;">દિવ્યવાણી</td>
-                <td colspan="3" style="border:1px solid #999; padding:4px 8px;">${data.divyavani || ""}</td>
+                <td><b>સમય:</b> ${startTime} થી ${endTime}</td>
+                <td><b>ગ્રેડ:</b> ${grade}</td>
             </tr>
             <tr>
-                <td style="border:1px solid #999; padding:4px 8px; font-weight:bold; background-color:#f9f9f9;">વિષય</td>
-                <td colspan="3" style="border:1px solid #999; padding:4px 8px;">${data.subject || ""}</td>
+                <td><b>પ્રસંગ:</b> ${occasion}</td>
+                <td><b>સ્થળ:</b> ${location}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>દિવ્યવાણી:</b> ${divyavani}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>સભાનો વિષય:</b> ${subject || "-"}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>કેટેગરી:</b><br/>${catHtml}</td>
             </tr>
         </table>
 
-        ${catRows ? `
-        <div style="margin-bottom:12px;">
-            <div style="font-weight:bold; font-size:11pt; margin-bottom:4px; color:#e58e00; border-bottom:1px solid #e58e00; padding-bottom:2px;">કેટેગરી વિગત:</div>
-            <table style="width:100%; border-collapse:collapse; margin-bottom:8px;">
-                ${catRows}
-            </table>
-        </div>` : ""}
+        <!-- SECTION BAR -->
+        <div class="section-bar">કથાવાર્તા અહેવાલ</div>
 
-        <div style="margin-top:10px;">
-            <div style="font-weight:bold; font-size:11pt; margin-bottom:4px; color:#e58e00; border-bottom:1px solid #e58e00; padding-bottom:2px;">વિગતવાર અહેવાલ:</div>
-            <div style="font-size:11pt; line-height:1.6; text-align:justify; padding-top:4px;">
-                ${data.htmlBody || ""}
-            </div>
-        </div>
+        <!-- BODY CONTENT -->
+        <div class="body-content">${htmlBody || "<p>-</p>"}</div>
     </div>`;
 }
 
-function getWordContent(data) {
-    return `<!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>SMVS Report</title>
-    </head>
-    <body>
-        ${getCleanPreviewHTML(data, true)}
-    </body>
-    </html>`;
-}
-
-async function handlePDF(data, fileName, action) {
+async function generatePDFDocument(data, fileName, action = "download") {
     const content = getCleanPreviewHTML(data, true);
+
     const opt = {
-        margin: [10, 10, 10, 10],
+        margin: [10, 10, 10, 10], // 10mm margin on all 4 sides
         filename: fileName + ".pdf",
         image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: {
+            scale: 2,
+            useCORS: true,
+            scrollY: 0,
+            logging: false,
+            letterRendering: true
+        },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        pagebreak: {
-            mode: ["avoid-all", "css", "legacy"],
-            avoid: ["tr", "p", "li", "h1", "h2", "h3", "h4", "h5", "h6"]
-        }
+        pagebreak: { mode: ["css", "legacy"] }
     };
+
     const worker = html2pdf().set(opt).from(content);
     if (action === "download") {
         await worker.save();
@@ -918,31 +1091,138 @@ async function handlePDF(data, fileName, action) {
     }
 }
 
-function handleWord(data, fileName, action) {
+function getWordContent(data) {
+    let catHtml = "";
+    if (data.categories) {
+        for (const [main, subs] of Object.entries(data.categories)) {
+            const subText = Array.isArray(subs) ? subs.join(", ") : (subs || "");
+            if (subText) {
+                catHtml += `<p style="margin: 0; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500;"><b>${main}:</b> ${subText}</p>`;
+            }
+        }
+    }
+    const dateParts = String(data.date || "").split("-");
+    const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : (data.date || "");
+
+    return `<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Hind+Vadodara:wght@400;500;600;700&display=swap');
+            body { font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; font-size: 11pt; color: #000; }
+            table { border-collapse: collapse; width: 100%; border: 1.5px solid black; }
+            td { border: 1px solid black; padding: 5px; vertical-align: top; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; }
+            h2 { margin: 0; font-weight: 700; font-family: 'Hind Vadodara', Arial, sans-serif; }
+            p { margin: 0; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; }
+            ul, ol { margin: 4px 0; padding-left: 20px; }
+            li { margin-bottom: 2px; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; }
+        </style>
+    </head>
+    <body>
+        <table border="1" cellspacing="0" cellpadding="5" width="100%">
+            <tr>
+                <td colspan="2" align="center" style="border-bottom: 2px solid black; padding: 10px;">
+                    <h2 style="font-size: 18pt; color: #000000; text-transform: uppercase;">SMVS SAMARPAN KARYALYA</h2>
+                    <p style="font-size: 10pt;">Video Post Production Data Report</p>
+                </td>
+            </tr>
+            <tr>
+                <td width="50%"><b>Date:</b> ${formattedDate}</td>
+                <td width="50%"><b>Day:</b> ${data.day || ""}</td>
+            </tr>
+            <tr>
+                <td><b>Time:</b> ${data.startTime || ""} - ${data.endTime || ""}</td>
+                <td><b>Grade:</b> ${data.grade || ""}</td>
+            </tr>
+            <tr>
+                <td><b>Occasion:</b> ${data.occasion || ""}</td>
+                <td><b>Location:</b> ${data.location || ""}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Divyavani:</b> ${data.divyavani || ""}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Subject:</b><br/>${data.subject || ""}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Categories:</b><br/>${catHtml || "-"}</td>
+            </tr>
+            <tr>
+                <td colspan="2" style="background-color: #f0f0f0; font-weight: bold;"><b>Report Body:</b></td>
+            </tr>
+            <tr>
+                <td colspan="2" style="padding: 10px; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500;">
+                    ${data.htmlBody || ""}
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>`;
+}
+
+function generateWordDocument(data, fileName, action = "download") {
     const htmlContent = getWordContent(data);
     const converted = htmlDocx.asBlob(htmlContent, {
         orientation: "portrait",
         margins: { top: 720, bottom: 720, left: 720, right: 720 }
     });
-    if (action === "download") saveAs(converted, fileName + ".docx");
-    else if (action === "share") {
+    if (action === "download") {
+        saveAs(converted, fileName + ".docx");
+    } else if (action === "share") {
         shareFile(converted, fileName + ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     }
 }
 
 async function shareFile(blob, filename, mimeType) {
-    const file = new File([blob], filename, { type: mimeType });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-            await navigator.share({ files: [file], title: "SMVS Report", text: filename });
-        } catch (err) {}
-    } else {
-        alert("Downloading (Share not supported on this browser)");
-        saveAs(blob, filename);
+    try {
+        const file = new File([blob], filename, { type: mimeType });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: "SMVS Sabha Report",
+                    text: filename
+                });
+                return;
+            } catch (err) {
+                if (err.name === "AbortError") return; // User dismissed share sheet
+                console.warn("Native share error, falling back to download:", err);
+            }
+        }
+
+        // Fallback for browsers without file sharing (e.g. desktop)
+        if (typeof saveAs === "function") {
+            saveAs(blob, filename);
+        } else {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
+    } catch (e) {
+        console.warn("Share fallback error:", e);
+        if (typeof saveAs === "function") {
+            saveAs(blob, filename);
+        }
     }
 }
 
-// --- 11. PREVIEW REPORT MODAL ---
+window.handlePDF = function(action) {
+    return saveAndGenerate("pdf", action);
+};
+
+window.handleWord = function(action) {
+    return saveAndGenerate("word", action);
+};
+
+
 window.previewReport = function(source, id = null) {
     let data;
     if (source === "form") {
@@ -973,17 +1253,41 @@ window.showHistory = function() {
 
 async function fetchReports(force = false) {
     try {
-        const snap = await db.collection("reports").orderBy("createdAt", "desc").get();
+        const snap = await db.collection("reports").get();
         allReports = [];
         snap.forEach(doc => {
-            allReports.push({ id: doc.id, ...doc.data() });
+            const data = doc.data();
+            allReports.push({ id: doc.id, ...data });
         });
+        
+        // Robust sort descending by date / timestamp / createdAt
+        allReports.sort((a, b) => {
+            const getTimestamp = (r) => {
+                if (r.createdAt?.toDate) return r.createdAt.toDate().getTime();
+                if (r.timestamp?.toDate) return r.timestamp.toDate().getTime();
+                if (r.createdAt) return new Date(r.createdAt).getTime();
+                if (r.timestamp) return new Date(r.timestamp).getTime();
+                if (r.date) return new Date(r.date).getTime();
+                return 0;
+            };
+            return getTimestamp(b) - getTimestamp(a);
+        });
+
+        console.log("Total reports loaded from Firestore:", allReports.length);
     } catch (e) {
         console.warn("Error fetching reports from Firestore:", e);
     }
     updateDashboardUI();
     renderHistory(allReports);
 }
+
+window.closeMobileNav = function() {
+    const navEl = document.getElementById("smvsNavbarNav");
+    if (navEl && navEl.classList.contains("show") && typeof bootstrap !== "undefined") {
+        const bsCollapse = bootstrap.Collapse.getInstance(navEl) || new bootstrap.Collapse(navEl);
+        bsCollapse.hide();
+    }
+};
 
 function normalizeText(text) {
     if (!text) return "";
@@ -1079,20 +1383,28 @@ function renderHistory(reports) {
 
 window.downloadFromHistory = function(id, type, action) {
     const report = allReports.find(r => String(r.id) === String(id));
-    if (!report) return;
+    if (!report) {
+        alert("Report not found!");
+        return;
+    }
 
-    const d = new Date(report.date);
-    const dayStr = String(d.getDate()).padStart(2, "0");
-    const monthStr = d.toLocaleString("en-US", { month: "short" });
-    const yearStr = d.getFullYear();
-    const fname = `${dayStr} ${monthStr}_${yearStr}_${report.occasion}_${report.location}`;
+    const d = new Date(report.date || Date.now());
+    const dayStr = !isNaN(d) ? String(d.getDate()).padStart(2, "0") : "01";
+    const monthStr = !isNaN(d) ? d.toLocaleString("en-US", { month: "short" }) : "Report";
+    const yearStr = !isNaN(d) ? d.getFullYear() : "2026";
+    const fname = `${dayStr} ${monthStr}_${yearStr}_${report.occasion || 'Sabha'}_${report.location || 'Report'}`;
 
-    showLoader("PROCESSING EXPORT...");
-    if (type === "pdf") {
-        handlePDF(report, fname, action).finally(hideLoader);
-    } else {
-        handleWord(report, fname, action);
+    showLoader("PREPARING EXPORT...");
+    try {
+        if (type === "pdf") {
+            generatePDFDocument(report, fname, action).finally(hideLoader);
+        } else {
+            generateWordDocument(report, fname, action);
+            hideLoader();
+        }
+    } catch (err) {
         hideLoader();
+        alert("Export error: " + err.message);
     }
 };
 
@@ -1543,7 +1855,7 @@ window.deleteSubCategory = async function(catName, subName) {
     }
 };
 
-// Admin Users Tab
+// Admin Users Tab (Loaded from Firestore 'users' collection)
 async function renderAdminUsers(container) {
     let users = [];
     try {
@@ -1554,10 +1866,9 @@ async function renderAdminUsers(container) {
     }
 
     if (users.length === 0) {
-        users = [
-            { id: "1", username: "admin", email: "admin@smvs.org", fullName: "SMVS Administrator", role: "admin", isActive: true },
-            { id: "2", username: "user", email: "user@smvs.org", fullName: "SMVS User", role: "user", isActive: true }
-        ];
+        await seedDefaultUsersIfNeeded();
+        const snap = await db.collection("users").get();
+        snap.forEach(doc => users.push({ id: doc.id, ...doc.data() }));
     }
 
     container.innerHTML = `
@@ -1567,26 +1878,22 @@ async function renderAdminUsers(container) {
                 <h6 class="text-primary fw-bold mb-3"><i class="fa-solid fa-user-plus me-2"></i>Add New User</h6>
                 <form onsubmit="addUser(event)">
                     <div class="mb-2">
-                        <label class="form-label small">Username</label>
-                        <input type="text" id="newUsername" class="form-control" placeholder="Username" required>
+                        <label class="form-label small">Username / Email</label>
+                        <input type="text" id="newUsername" class="form-control" placeholder="user@smvs.org" required>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label small">Email</label>
-                        <input type="email" id="newUserEmail" class="form-control" placeholder="Email" required>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label small">Full Name</label>
-                        <input type="text" id="newUserFullName" class="form-control" placeholder="Full Name">
+                        <label class="form-label small">Display Name</label>
+                        <input type="text" id="newUserDisplayName" class="form-control" placeholder="PSK" required>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small">Password</label>
-                        <input type="password" id="newUserPass" class="form-control" placeholder="Password" required>
+                        <input type="text" id="newUserPass" class="form-control" placeholder="Password" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small">Role</label>
                         <select id="newUserRole" class="form-select">
-                            <option value="user">User (Standard)</option>
-                            <option value="admin">Administrator</option>
+                            <option value="admin">Admin (Full Access)</option>
+                            <option value="user">User (Standard Access)</option>
                         </select>
                     </div>
                     <button type="submit" class="btn btn-primary w-100 fw-bold"><i class="fa-solid fa-user-check me-1"></i> Create User</button>
@@ -1596,13 +1903,17 @@ async function renderAdminUsers(container) {
 
         <div class="col-12 col-lg-8">
             <div class="card p-3">
-                <h6 class="text-primary fw-bold mb-3"><i class="fa-solid fa-users me-2"></i>Existing Users (${users.length})</h6>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="text-primary fw-bold mb-0"><i class="fa-solid fa-users me-2"></i>Existing Users (${users.length})</h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="switchAdminTab('users')"><i class="fa-solid fa-rotate me-1"></i> Refresh</button>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-dark table-hover mb-0 align-middle">
                         <thead>
                             <tr class="text-muted small">
-                                <th>User</th>
-                                <th>Email</th>
+                                <th>Display Name</th>
+                                <th>Username / Email</th>
+                                <th>Password</th>
                                 <th>Role</th>
                                 <th>Status</th>
                                 <th class="text-end">Actions</th>
@@ -1611,13 +1922,14 @@ async function renderAdminUsers(container) {
                         <tbody>
                             ${users.map(u => `
                                 <tr>
-                                    <td class="fw-bold">${u.fullName || u.username}</td>
-                                    <td><small class="text-muted">${u.email}</small></td>
-                                    <td><span class="${u.role === 'admin' ? 'badge bg-warning text-dark' : 'badge bg-secondary'}">${u.role}</span></td>
+                                    <td class="fw-bold">${u.displayName || u.fullName || u.username}</td>
+                                    <td><small class="text-muted">${u.username || u.email}</small></td>
+                                    <td><code class="text-warning">${u.password || "••••"}</code></td>
+                                    <td><span class="${u.role === 'admin' ? 'badge bg-warning text-dark' : 'badge bg-secondary'}">${(u.role || 'user').toUpperCase()}</span></td>
                                     <td><span class="badge ${u.isActive !== false ? 'bg-success' : 'bg-danger'}">${u.isActive !== false ? 'Active' : 'Inactive'}</span></td>
                                     <td class="text-end text-nowrap">
-                                        <button class="btn btn-sm btn-outline-warning me-1" onclick="openAdminEdit('user', '${u.id}', '${u.username}', '', null, '${(u.fullName||'').replace(/'/g, "\\'")}', '${u.email}', '${u.role}', ${u.isActive !== false ? 1 : 0});" title="Edit User"><i class="fa-solid fa-pen-to-square"></i></button>
-                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.id}')" ${u.email === currentUser?.email ? 'disabled' : ''} title="Delete User"><i class="fa-solid fa-trash"></i></button>
+                                        <button class="btn btn-sm btn-outline-warning me-1" onclick="openAdminEdit('user', '${u.id}', '${u.username}', '', null, '${(u.displayName||u.fullName||'').replace(/'/g, "\\'")}', '${u.email||u.username}', '${u.role}', ${u.isActive !== false ? 1 : 0}, '${(u.password||'').replace(/'/g, "\\'")}');" title="Edit User"><i class="fa-solid fa-pen-to-square"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.id}')" ${u.username === currentUser?.username ? 'disabled' : ''} title="Delete User"><i class="fa-solid fa-trash"></i></button>
                                     </td>
                                 </tr>
                             `).join("")}
@@ -1632,21 +1944,23 @@ async function renderAdminUsers(container) {
 window.addUser = async function(e) {
     e.preventDefault();
     const username = document.getElementById("newUsername").value.trim();
-    const email = document.getElementById("newUserEmail").value.trim();
-    const fullName = document.getElementById("newUserFullName").value.trim();
+    const displayName = document.getElementById("newUserDisplayName").value.trim();
+    const password = document.getElementById("newUserPass").value.trim();
     const role = document.getElementById("newUserRole").value;
 
-    showLoader("ADDING USER...");
+    showLoader("CREATING USER...");
     try {
         await db.collection("users").add({
             username,
-            email,
-            fullName,
+            email: username,
+            displayName,
+            fullName: displayName,
+            password,
             role,
             isActive: true,
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
         });
-        alert("User added in records!");
+        alert("User added successfully in Firestore!");
         switchAdminTab("users");
     } catch (err) {
         alert("Error: " + err.message);
@@ -1656,7 +1970,7 @@ window.addUser = async function(e) {
 };
 
 window.deleteUser = async function(id) {
-    if (!confirm("Delete user record?")) return;
+    if (!confirm("Delete user record from Firestore?")) return;
     try {
         await db.collection("users").doc(id).delete();
         switchAdminTab("users");
@@ -1666,7 +1980,7 @@ window.deleteUser = async function(id) {
 };
 
 // --- 15. UNIVERSAL ADMIN EDIT MODAL ---
-window.openAdminEdit = function(type, id, name, code = "", parentId = null, fullName = "", email = "", role = "user", isActive = 1) {
+window.openAdminEdit = function(type, id, name, code = "", parentId = null, fullName = "", email = "", role = "user", isActive = 1, password = "") {
     document.getElementById("adminEditType").value = type;
     document.getElementById("adminEditId").value = id;
 
@@ -1720,7 +2034,7 @@ window.openAdminEdit = function(type, id, name, code = "", parentId = null, full
         document.getElementById("adminEditUserFullName").value = fullName;
         document.getElementById("adminEditUserEmail").value = email;
         document.getElementById("adminEditUserRole").value = role;
-        document.getElementById("adminEditUserPassword").value = "";
+        document.getElementById("adminEditUserPassword").value = password || "";
         document.getElementById("adminEditUserActive").checked = Boolean(isActive);
     }
 
@@ -1784,18 +2098,32 @@ window.submitAdminEdit = async function(e) {
                 switchAdminTab("categories");
             }
         } else if (type === "user") {
-            const fullName = document.getElementById("adminEditUserFullName").value.trim();
-            const email = document.getElementById("adminEditUserEmail").value.trim();
+            const displayName = document.getElementById("adminEditUserFullName").value.trim();
+            const username = document.getElementById("adminEditUserEmail").value.trim();
             const role = document.getElementById("adminEditUserRole").value;
+            const password = document.getElementById("adminEditUserPassword").value.trim();
             const isActive = document.getElementById("adminEditUserActive").checked;
 
-            await db.collection("users").doc(id).set({
-                fullName,
-                email,
+            const updatePayload = {
+                displayName,
+                fullName: displayName,
+                username,
+                email: username,
                 role,
                 isActive,
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+            };
+            if (password) updatePayload.password = password;
+
+            await db.collection("users").doc(id).set(updatePayload, { merge: true });
+
+            // If updating current active user, update state
+            if (currentUser && currentUser.id === id) {
+                currentUser.displayName = displayName;
+                currentUser.username = username;
+                currentUser.role = role;
+                localStorage.setItem("smvs_active_user", JSON.stringify(currentUser));
+            }
 
             switchAdminTab("users");
         }
@@ -1811,6 +2139,12 @@ window.submitAdminEdit = async function(e) {
 // --- 16. INITIALIZATION ON DOM READY ---
 document.addEventListener("DOMContentLoaded", () => {
     initEmailJsIfConfigured();
+
+    // Check existing active user session
+    checkSavedSession();
+
+    // Pre-seed user accounts in background
+    seedDefaultUsersIfNeeded().catch(console.warn);
 
     // Initialize Quill Editor
     const editorEl = document.getElementById("editor-container");
@@ -1837,3 +2171,11 @@ document.addEventListener("DOMContentLoaded", () => {
         reportForm.addEventListener("change", scheduleDraftSave);
     }
 });
+
+window.closeSidebarDrawer = function() {
+    const el = document.getElementById("smvsSidebarDrawer");
+    if (el && typeof bootstrap !== "undefined") {
+        const offcanvas = bootstrap.Offcanvas.getInstance(el);
+        if (offcanvas) offcanvas.hide();
+    }
+};

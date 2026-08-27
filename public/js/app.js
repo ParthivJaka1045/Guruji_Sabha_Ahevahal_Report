@@ -1,110 +1,249 @@
 // ============================================
-// SMVS Report Portal — Complete Client Application
-// 100% Exact Original UI & Theme + Full SQLite Architecture
+// SMVS Report Portal — Firebase Production App
+// Powered by Firestore Database & Custom User Management
 // ============================================
 
-let currentUser = null;
-let quill = null;
+// --- 1. FIREBASE CONFIG & INITIALIZATION ---
+const firebaseConfig = {
+    apiKey: "AIzaSyDB_GvwLwqBJuZxYob0b5Vh-L-nFn4YdIs",
+    authDomain: "smvs-report-app.firebaseapp.com",
+    projectId: "smvs-report-app",
+    storageBucket: "smvs-report-app.firebasestorage.app",
+    messagingSenderId: "780579541622",
+    appId: "1:780579541622:web:fa9843949311131e13c557"
+};
+
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.firestore();
+
+// --- 1.1 INTEGRATIONS CONFIG (Option B: Apps Script + EmailJS) ---
+const APPS_SCRIPT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzdtJC9HbIKwYoyv3WsQkQojMHJI_ya3K46BvEmGagyGNBrp0TuvoxQZaIm47cuSlk/exec";
+const APPS_SCRIPT_TOKEN = "Smvs@2026#SheetSync!";
+
+const EMAILJS_PUBLIC_KEY = "RCTkUbi6HqVHM_A9s";
+const EMAILJS_SERVICE_ID = "service_4zt00gn";
+const EMAILJS_TEMPLATE_ID = "template_euujipn";
+const EMAILJS_TO_EMAIL = "Jakasaniyaparthiv@gmail.com";
+const APP_DOWNLOAD_BASE_URL = window.location.origin;
+
+function initEmailJsIfConfigured() {
+    try {
+        if (window.emailjs && EMAILJS_PUBLIC_KEY) {
+            emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+        }
+    } catch (_) {}
+}
+
+// --- 2. GLOBAL STATE & STATIC SEED DATA ---
+let quill;
 let currentReportId = null;
 let allReports = [];
+let currentUser = null;
 let locationTree = [];
 let categoriesData = {};
 let previewModal = null;
 let currentAdminTab = "locations";
 
-// --- 1. INITIALIZATION ---
-document.addEventListener("DOMContentLoaded", async () => {
-    previewModal = new bootstrap.Modal(document.getElementById("previewModal"));
-    initQuill();
-    await checkAuth();
-});
+let adminSelectedCountryId = null;
+let adminSelectedZoneId = null;
+let adminSelectedCategoryId = null;
+let adminEditModalInstance = null;
 
-function initQuill() {
-    quill = new Quill("#editor-container", {
-        theme: "snow",
-        placeholder: "Report content here (અહીં લખો)...",
-        modules: {
-            toolbar: [
-                ["bold", "italic", "underline"],
-                [{ list: "ordered" }, { list: "bullet" }],
-                [{ align: [] }],
-                ["clean"]
-            ]
-        }
-    });
-
-    quill.on("text-change", () => {
-        scheduleDraftSave();
-    });
-}
-
-// Helper for all authenticated API calls (cookie + localStorage bearer)
-window.authFetch = function(url, options = {}) {
-    options.headers = options.headers || {};
-    const token = localStorage.getItem("smvs_auth_token");
-    if (token) {
-        if (options.headers instanceof Headers) {
-            options.headers.set("Authorization", "Bearer " + token);
-        } else {
-            options.headers["Authorization"] = "Bearer " + token;
-        }
+// Initial static seed for locations (Country -> Zones -> Centers)
+const defaultLocationTree = [
+    {
+        id: 100001,
+        name: "India",
+        code: "IN",
+        zones: [
+            { id: 200001, name: "Ahmedabad East", centers: [{ id: 300001, name: "Ghanshyamnagar" }, { id: 300002, name: "Isanpur" }, { id: 300003, name: "Naroda" }, { id: 300004, name: "Nikol" }, { id: 300005, name: "Vastral" }] },
+            { id: 200002, name: "Ahmedabad West", centers: [{ id: 300006, name: "Bavla" }, { id: 300007, name: "Ghatlodiya" }, { id: 300008, name: "Gota" }, { id: 300009, name: "Sanand" }, { id: 300010, name: "Satellite" }, { id: 300011, name: "Vasna" }] },
+            { id: 200003, name: "Anand", centers: [{ id: 300012, name: "Anand" }] },
+            { id: 200004, name: "Bhavnagar", centers: [{ id: 300013, name: "Bhavnagar" }, { id: 300014, name: "Una" }] },
+            { id: 200005, name: "Gandhinagar", centers: [{ id: 300015, name: "Chandkheda" }, { id: 300016, name: "Gandhinagar" }, { id: 300017, name: "Kalol" }, { id: 300018, name: "Swaminarayan Dham" }, { id: 300019, name: "Vijapur" }] },
+            { id: 200006, name: "Godhar", centers: [{ id: 300020, name: "Godhar" }, { id: 300021, name: "Santrampur" }, { id: 300022, name: "Virpur" }] },
+            { id: 200007, name: "Godhara", centers: [{ id: 300023, name: "Chhodaudepur" }, { id: 300024, name: "Dahod" }, { id: 300025, name: "Godhra" }, { id: 300026, name: "Zalod" }] },
+            { id: 200008, name: "Himmatnagar", centers: [{ id: 300027, name: "Bayad" }, { id: 300028, name: "Himmatnagar" }, { id: 300029, name: "Malpur" }, { id: 300030, name: "Modasa" }] },
+            { id: 200009, name: "Maharastra", centers: [{ id: 300031, name: "Kandivali" }, { id: 300032, name: "Navi Mumbai" }, { id: 300033, name: "Pune" }] },
+            { id: 200010, name: "Mahesana", centers: [{ id: 300034, name: "Kadi" }, { id: 300035, name: "Mehsana" }, { id: 300036, name: "Palanpur" }, { id: 300037, name: "Patan" }, { id: 300038, name: "Unjha" }, { id: 300039, name: "Visnagar" }] },
+            { id: 200011, name: "Morbi", centers: [{ id: 300040, name: "Bhuj" }, { id: 300041, name: "Morbi" }] },
+            { id: 200012, name: "Rajkot", centers: [{ id: 300042, name: "Junagadh" }, { id: 300043, name: "Rajkot" }] },
+            { id: 200013, name: "Surat", centers: [{ id: 300044, name: "Ankleshwar" }, { id: 300045, name: "Bharuch" }, { id: 300046, name: "Dabholi" }, { id: 300047, name: "Varachha" }] },
+            { id: 200014, name: "Surendranagar", centers: [{ id: 300048, name: "Surendranagar" }, { id: 300049, name: "Viramgam" }] },
+            { id: 200015, name: "Vadodara", centers: [{ id: 300050, name: "Halol" }, { id: 300051, name: "Vadodara" }, { id: 300052, name: "Waghodiya" }] }
+        ]
     }
-    return fetch(url, options);
+];
+
+// Initial static seed for categories
+const defaultCategoriesData = {
+    "SK": ["સંત સભા", "સંત શિબિર", "STK સભા", "STK શિબિર", "SKS", "છાત્રાલય", "SBS"],
+    "AP": ["Pre-AYP", "AYP", "પ્રી-મુમુક્ષુ", "ABS", "AVP"],
+    "Prakashan": ["ગુરુકુળ", "પ્રકાશન", "ચેનલ", "વેબસાઇટ", "સોશિયલ મીડિયા", "DC (SC...)", "પુસ્તક", "ક્લીપ", "Store"],
+    "Satsang Samaj": ["બાળકો", "કિશોરો", "યુવકો", "વડીલો", "અંગત સભા", "અંગત શિબિર", "પ્રાતઃસભા", "VCD સભા", "ઉત્સવ"],
+    "Talim": ["પૂ.સંતો", "સ્ટાફ (તાલીમ)", "અગ્રેસર (તાલીમ)", "સંચાલક (તાલીમ)", "કાર્યકર (તાલીમ)"],
+    "Sevabhavi": ["સંચાલક (સેવાભાવી)", "કાર્યકર (સેવાભાવી)", "અગ્રેસર (સેવાભાવી)", "સ્ટાફ (સેવાભાવી)", "BN"]
 };
 
-// --- 2. AUTHENTICATION ---
-async function checkAuth() {
-    showLoader("AUTHENTICATING...");
+// --- 3. FIRESTORE SEED & LOAD FUNCTIONS ---
+async function seedDefaultUsersIfNeeded() {
     try {
-        const res = await authFetch("/api/auth/me");
-        const data = await res.json();
-        if (data.ok && data.user) {
-            currentUser = data.user;
-            await onLoginSuccess();
-        } else {
-            showLoginView();
+        const pskQuery = await db.collection("users").where("username", "==", "psk.assist@in.smvs.org").get();
+        if (pskQuery.empty) {
+            console.log("Seeding initial PSK Admin user to Firestore...");
+            await db.collection("users").add({
+                username: "psk.assist@in.smvs.org",
+                email: "psk.assist@in.smvs.org",
+                displayName: "PSK",
+                role: "admin",
+                password: "psk@2026",
+                isActive: true,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+        const adminQuery = await db.collection("users").where("username", "==", "admin@smvs.org").get();
+        if (adminQuery.empty) {
+            await db.collection("users").add({
+                username: "admin@smvs.org",
+                email: "admin@smvs.org",
+                displayName: "SMVS Administrator",
+                role: "admin",
+                password: "Admin@2026",
+                isActive: true,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
         }
     } catch (e) {
-        showLoginView();
-    } finally {
-        hideLoader();
+        console.warn("User seeding note:", e);
     }
 }
 
-window.handleLogin = async function(event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
+async function loadLocationsTree() {
+    try {
+        const doc = await db.collection("locations_master").doc("tree").get();
+        if (doc.exists && doc.data()?.tree?.length > 0) {
+            locationTree = doc.data().tree;
+        } else {
+            console.log("Seeding default locations to Firestore...");
+            await db.collection("locations_master").doc("tree").set({ tree: defaultLocationTree });
+            locationTree = JSON.parse(JSON.stringify(defaultLocationTree));
+        }
+    } catch (err) {
+        console.warn("Falling back to local static locations:", err);
+        locationTree = JSON.parse(JSON.stringify(defaultLocationTree));
     }
+    populateCountryDropdown();
+}
+
+async function loadCategories() {
+    try {
+        const doc = await db.collection("categories_master").doc("data").get();
+        if (doc.exists && doc.data()?.categories) {
+            categoriesData = doc.data().categories;
+        } else {
+            console.log("Seeding default categories to Firestore...");
+            await db.collection("categories_master").doc("data").set({ categories: defaultCategoriesData });
+            categoriesData = JSON.parse(JSON.stringify(defaultCategoriesData));
+        }
+    } catch (err) {
+        console.warn("Falling back to local categories:", err);
+        categoriesData = JSON.parse(JSON.stringify(defaultCategoriesData));
+    }
+    renderCategories();
+}
+
+async function saveLocationsTreeToFirestore() {
+    try {
+        await db.collection("locations_master").doc("tree").set({ tree: locationTree, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    } catch (e) {
+        console.error("Error saving location tree:", e);
+    }
+}
+
+async function saveCategoriesToFirestore() {
+    try {
+        await db.collection("categories_master").doc("data").set({ categories: categoriesData, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    } catch (e) {
+        console.error("Error saving categories:", e);
+    }
+}
+
+// --- 4. AUTHENTICATION VIA FIRESTORE 'users' COLLECTION ---
+window.handleLogin = async function(e) {
+    if (e) e.preventDefault();
+    const userInput = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
     const loginBtn = document.getElementById("loginBtn");
     const errorDiv = document.getElementById("loginError");
-    const emailOrUsername = document.getElementById("loginEmail").value.trim();
-    const password = document.getElementById("loginPassword").value;
 
     errorDiv.classList.add("d-none");
     loginBtn.disabled = true;
     loginBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Verifying...';
 
     try {
-        const res = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ emailOrUsername, password })
-        });
-        const data = await res.json();
+        console.log("Checking credentials in Firestore users collection for:", userInput);
+        
+        // Ensure initial user exists
+        await seedDefaultUsersIfNeeded();
 
-        if (data.ok && data.user) {
-            if (data.token) {
-                localStorage.setItem("smvs_auth_token", data.token);
-            }
-            currentUser = data.user;
-            await onLoginSuccess();
+        // Check by username OR email
+        let userDoc = null;
+        let userData = null;
+
+        const snap1 = await db.collection("users").where("username", "==", userInput).get();
+        if (!snap1.empty) {
+            userDoc = snap1.docs[0];
+            userData = userDoc.data();
         } else {
-            errorDiv.textContent = data.error || "Invalid Credentials!";
-            errorDiv.classList.remove("d-none");
+            const snap2 = await db.collection("users").where("email", "==", userInput).get();
+            if (!snap2.empty) {
+                userDoc = snap2.docs[0];
+                userData = userDoc.data();
+            } else {
+                // Case-insensitive fallback
+                const allUsersSnap = await db.collection("users").get();
+                allUsersSnap.forEach(doc => {
+                    const d = doc.data();
+                    if ((d.username && d.username.toLowerCase() === userInput.toLowerCase()) || 
+                        (d.email && d.email.toLowerCase() === userInput.toLowerCase())) {
+                        userDoc = doc;
+                        userData = d;
+                    }
+                });
+            }
         }
+
+        if (!userData) {
+            throw new Error("Username અથવા Email મળ્યો નથી! (User Not Found)");
+        }
+
+        if (userData.isActive === false) {
+            throw new Error("આ એકાઉન્ટ સસ્પેન્ડ/ઇનએક્ટિવ છે. એડમિનનો સંપર્ક કરો.");
+        }
+
+        if (userData.password !== password) {
+            throw new Error("પાસવર્ડ ખોટો છે! (Incorrect Password)");
+        }
+
+        currentUser = {
+            id: userDoc.id,
+            uid: userDoc.id,
+            username: userData.username,
+            email: userData.email || userData.username,
+            displayName: userData.displayName || userData.fullName || userData.username,
+            role: (userData.role || "user").toLowerCase()
+        };
+
+        // Save session in localStorage
+        localStorage.setItem("smvs_active_user", JSON.stringify(currentUser));
+        console.log("Login Success! Logged in as:", currentUser.displayName, "(" + currentUser.role + ")");
+
+        onLoginSuccess();
     } catch (err) {
-        errorDiv.textContent = "Server connection error.";
+        console.error("Login failed:", err);
+        errorDiv.textContent = err.message || "Invalid Username or Password!";
         errorDiv.classList.remove("d-none");
     } finally {
         loginBtn.disabled = false;
@@ -113,15 +252,12 @@ window.handleLogin = async function(event) {
     return false;
 };
 
-async function logoutUser() {
-    if (!confirm("Logout?")) return;
-    try {
-        await authFetch("/api/auth/logout", { method: "POST" });
-    } catch (e) {}
-    localStorage.removeItem("smvs_auth_token");
+window.logoutUser = function() {
+    if (!confirm("Are you sure you want to Logout?")) return;
+    localStorage.removeItem("smvs_active_user");
     currentUser = null;
     showLoginView();
-}
+};
 
 function showLoginView() {
     document.getElementById("mainApp").classList.add("d-none");
@@ -169,21 +305,38 @@ async function onLoginSuccess() {
     document.getElementById("mainApp").classList.remove("d-none");
 
     const badge = document.getElementById("userBadge");
-    if (badge) {
-        badge.textContent = `@${currentUser.username} (${currentUser.role})`;
-    }
-
+    const drawerBadge = document.getElementById("drawerUserBadge");
+    const adminDrawerBtn = document.getElementById("adminDrawerBtn");
     const adminNavBtn = document.getElementById("adminNavBtn");
+
+    const badgeText = `${currentUser.displayName || currentUser.username} (${currentUser.role.toUpperCase()})`;
+    if (badge) badge.textContent = badgeText;
+    if (drawerBadge) drawerBadge.textContent = badgeText;
+
     if (currentUser.role === "admin") {
         if (adminNavBtn) adminNavBtn.classList.remove("d-none");
+        if (adminDrawerBtn) {
+            adminDrawerBtn.classList.remove("d-none");
+            adminDrawerBtn.classList.add("d-flex");
+        }
     } else {
         if (adminNavBtn) adminNavBtn.classList.add("d-none");
+        if (adminDrawerBtn) {
+            adminDrawerBtn.classList.add("d-none");
+            adminDrawerBtn.classList.remove("d-flex");
+        }
     }
 
-    await loadInitialData();
+    showLoader("LOADING PORTAL...");
+    try {
+        await Promise.all([loadLocationsTree(), loadCategories(), fetchReports()]);
+    } finally {
+        hideLoader();
+    }
+
     showDashboard();
 
-    // Auto-resume draft if any exists on startup
+    // Auto-resume draft if any exists
     setTimeout(() => {
         const hasDraft = loadDraftIfAny();
         if (hasDraft) {
@@ -191,76 +344,27 @@ async function onLoginSuccess() {
             document.getElementById("formView").classList.remove("d-none");
             toggleButtons("create");
             currentReportId = null;
-
-            const toast = document.createElement("div");
-            toast.className = "position-fixed bottom-0 end-0 p-3";
-            toast.style.zIndex = "1055";
-            toast.innerHTML = `
-                <div class="toast show align-items-center text-white bg-warning border-0" role="alert" aria-live="assertive" aria-atomic="true">
-                  <div class="d-flex text-dark fw-bold" style="background: var(--bg-card-solid); border: 1px solid var(--primary); border-radius: var(--radius); padding: 8px 14px;">
-                    <div class="toast-body" style="color: var(--text-main) !important;">
-                      <i class="fa-solid fa-clock-rotate-left me-2" style="color: var(--primary);"></i> Unsaved draft auto-restored! (અધૂરો અહેવાલ મેળવી લીધો છે!)
-                    </div>
-                    <button type="button" class="btn-close btn-close-white ms-auto m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                  </div>
-                </div>
-            `;
-            document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.classList.remove("show");
-                setTimeout(() => toast.remove(), 500);
-            }, 4000);
         }
-    }, 300);
+    }, 100);
 }
 
-// --- 3. DATA LOADING ---
-async function loadInitialData() {
-    await Promise.all([loadLocationsTree(), loadCategories(), fetchReports()]);
-}
-
-async function loadLocationsTree() {
+// Auto-restore session from localStorage on startup
+function checkSavedSession() {
     try {
-        const res = await fetch("/api/locations/tree");
-        const data = await res.json();
-        if (data.ok) {
-            locationTree = data.tree;
-            populateCountryDropdowns();
+        const saved = localStorage.getItem("smvs_active_user");
+        if (saved) {
+            currentUser = JSON.parse(saved);
+            if (currentUser && currentUser.username) {
+                onLoginSuccess();
+                return;
+            }
         }
-    } catch (e) {
-        console.error("Failed to load locations:", e);
-    }
+    } catch (e) {}
+    showLoginView();
 }
 
-async function loadCategories() {
-    try {
-        const res = await fetch("/api/categories");
-        const data = await res.json();
-        if (data.ok) {
-            categoriesData = data.categories;
-            renderCategories();
-        }
-    } catch (e) {
-        console.error("Failed to load categories:", e);
-    }
-}
-
-async function fetchReports() {
-    try {
-        const res = await authFetch("/api/reports");
-        const data = await res.json();
-        if (data.ok) {
-            allReports = data.reports;
-            const countEl = document.getElementById("historyCount");
-            if (countEl) countEl.textContent = `${allReports.length}`;
-        }
-    } catch (e) {
-        console.error("Failed to fetch reports:", e);
-    }
-}
-
-// --- 4. 3-TIER CASCADING SELECTORS ---
-function populateCountryDropdowns() {
+// --- 5. LOCATION DROPDOWNS (3-TIER: COUNTRY -> ZONE -> CENTER) ---
+function populateCountryDropdown() {
     const cSelect = document.getElementById("countrySelect");
     const fCountry = document.getElementById("filterCountry");
 
@@ -269,14 +373,11 @@ function populateCountryDropdowns() {
         locationTree.forEach(c => {
             const opt = document.createElement("option");
             opt.value = c.id;
-            opt.textContent = `${c.name} ${c.code ? '(' + c.code + ')' : ''}`;
+            opt.textContent = c.name;
             cSelect.appendChild(opt);
         });
-
-        // Default to India if available
-        const india = locationTree.find(c => c.name.toLowerCase() === "india");
-        if (india) {
-            cSelect.value = india.id;
+        if (locationTree.length > 0) {
+            cSelect.value = locationTree[0].id;
             handleCountryChange();
         }
     }
@@ -292,7 +393,7 @@ function populateCountryDropdowns() {
     }
 }
 
-function handleCountryChange() {
+window.handleCountryChange = function() {
     const cSelect = document.getElementById("countrySelect");
     const zSelect = document.getElementById("zoneSelect");
     const cntSelect = document.getElementById("centerSelect");
@@ -316,9 +417,9 @@ function handleCountryChange() {
         zSelect.disabled = true;
     }
     scheduleDraftSave();
-}
+};
 
-function handleZoneChange() {
+window.handleZoneChange = function() {
     const cSelect = document.getElementById("countrySelect");
     const zSelect = document.getElementById("zoneSelect");
     const cntSelect = document.getElementById("centerSelect");
@@ -327,7 +428,7 @@ function handleZoneChange() {
     const zoneId = parseInt(zSelect.value);
 
     const country = locationTree.find(c => c.id === countryId);
-    const zone = country?.zones.find(z => z.id === zoneId);
+    const zone = country?.zones?.find(z => z.id === zoneId);
 
     cntSelect.innerHTML = '<option value="" disabled selected>Select Center</option>';
 
@@ -343,9 +444,9 @@ function handleZoneChange() {
         cntSelect.disabled = true;
     }
     scheduleDraftSave();
-}
+};
 
-function handleCenterChange() {
+window.handleCenterChange = function() {
     const cntSelect = document.getElementById("centerSelect");
     const locInput = document.getElementById("location");
     const selectedText = cntSelect.options[cntSelect.selectedIndex]?.textContent;
@@ -354,10 +455,9 @@ function handleCenterChange() {
         locInput.value = selectedText;
     }
     scheduleDraftSave();
-}
+};
 
-// Filter Dropdowns
-function handleFilterCountryChange() {
+window.handleFilterCountryChange = function() {
     const fCountry = document.getElementById("filterCountry");
     const fZone = document.getElementById("filterZone");
     const fCenter = document.getElementById("filterCenter");
@@ -381,9 +481,9 @@ function handleFilterCountryChange() {
         fZone.disabled = true;
     }
     filterReports();
-}
+};
 
-function handleFilterZoneChange() {
+window.handleFilterZoneChange = function() {
     const fCountry = document.getElementById("filterCountry");
     const fZone = document.getElementById("filterZone");
     const fCenter = document.getElementById("filterCenter");
@@ -392,7 +492,7 @@ function handleFilterZoneChange() {
     const zoneId = parseInt(fZone.value);
 
     const country = locationTree.find(c => c.id === countryId);
-    const zone = country?.zones.find(z => z.id === zoneId);
+    const zone = country?.zones?.find(z => z.id === zoneId);
 
     fCenter.innerHTML = '<option value="">All Centers</option>';
 
@@ -408,45 +508,52 @@ function handleFilterZoneChange() {
         fCenter.disabled = true;
     }
     filterReports();
-}
+};
 
-// --- 5. EXACT ORIGINAL CATEGORIES RENDERER ---
+// --- 6. CATEGORIES RENDERER ---
 function renderCategories() {
-    const container = document.getElementById("categoryContainer");
+    const container = document.getElementById("categoriesContainer");
     if (!container) return;
-    let html = "";
+    container.innerHTML = "";
+
     for (const [main, subs] of Object.entries(categoriesData)) {
         const safeId = main.replace(/\s+/g, "_");
-        html += `
-        <div class="mb-2 p-2 rounded border" style="background-color: var(--bg-body);">
-            <div class="d-flex align-items-center">
-                <input class="form-check-input me-2" type="checkbox" id="main_${safeId}" value="${main}" onchange="toggleSub('${safeId}')">
-                <label class="fw-bold mb-0" style="color: var(--primary); cursor:pointer;" for="main_${safeId}">${main}</label>
+        const card = document.createElement("div");
+        card.className = "category-group-card p-3 mb-2";
+        card.innerHTML = `
+            <div class="form-check">
+                <input class="form-check-input main-cat-check" type="checkbox" id="main_${safeId}" value="${main}">
+                <label class="form-check-label fw-bold text-primary cursor-pointer" for="main_${safeId}">${main}</label>
             </div>
-            <div id="subs_${safeId}" class="d-none ms-3 mt-1 d-flex flex-wrap">
-                ${subs.map((sub, index) => `
-                    <div class="me-2 mb-1">
-                        <input type="checkbox" class="sub-cat-${safeId}" value="${sub}" id="sub_${safeId}_${index}" onchange="scheduleDraftSave()">
-                        <label class="ms-1 small text-muted" for="sub_${safeId}_${index}">${sub}</label>
+            <div class="sub-categories mt-2 ps-3 d-none" id="subs_${safeId}">
+                ${subs.map(sub => `
+                    <div class="form-check mb-1">
+                        <input class="form-check-input sub-cat-check sub-cat-${safeId}" type="checkbox" id="sub_${safeId}_${sub.replace(/\s+/g, "_")}" value="${sub}">
+                        <label class="form-check-label text-muted small cursor-pointer" for="sub_${safeId}_${sub.replace(/\s+/g, "_")}">${sub}</label>
                     </div>
                 `).join("")}
             </div>
-        </div>`;
-    }
-    container.innerHTML = html;
-}
+        `;
+        container.appendChild(card);
 
-window.toggleSub = function(safeId) {
-    const mainCheck = document.getElementById(`main_${safeId}`);
-    const subDiv = document.getElementById(`subs_${safeId}`);
-    if (mainCheck.checked) {
-        subDiv.classList.remove("d-none");
-    } else {
-        subDiv.classList.add("d-none");
-        document.querySelectorAll(`.sub-cat-${safeId}`).forEach(el => el.checked = false);
+        const mainCheck = card.querySelector(`#main_${safeId}`);
+        const subsDiv = card.querySelector(`#subs_${safeId}`);
+
+        mainCheck.addEventListener("change", (e) => {
+            if (e.target.checked) {
+                subsDiv.classList.remove("d-none");
+            } else {
+                subsDiv.classList.add("d-none");
+                subsDiv.querySelectorAll(".sub-cat-check").forEach(chk => (chk.checked = false));
+            }
+            scheduleDraftSave();
+        });
+
+        subsDiv.querySelectorAll(".sub-cat-check").forEach(chk => {
+            chk.addEventListener("change", scheduleDraftSave);
+        });
     }
-    scheduleDraftSave();
-};
+}
 
 function getSelectedCategories() {
     const selected = {};
@@ -454,20 +561,18 @@ function getSelectedCategories() {
         const safeId = main.replace(/\s+/g, "_");
         const mainCheck = document.getElementById(`main_${safeId}`);
         if (mainCheck && mainCheck.checked) {
-            const subs = [];
-            document.querySelectorAll(`.sub-cat-${safeId}:checked`).forEach(chk => subs.push(chk.value));
-            selected[main] = subs;
+            selected[main] = [];
+            const subChecks = document.querySelectorAll(`.sub-cat-${safeId}:checked`);
+            subChecks.forEach(chk => selected[main].push(chk.value));
         }
     }
     return selected;
 }
 
-// --- 6. DATE & FORM AUTO-FILL ---
-function updateDay() {
+// --- 7. REPORT FORM HELPERS & DRAFT ---
+window.updateDay = function() {
     const dateInput = document.getElementById("date");
     const dayInput = document.getElementById("day");
-    if (!dateInput.value) return;
-
     const days = [
         "Sunday (રવિવાર)",
         "Monday (સોમવાર)",
@@ -480,7 +585,7 @@ function updateDay() {
     const d = new Date(dateInput.value);
     if (!isNaN(d)) dayInput.value = days[d.getDay()];
     scheduleDraftSave();
-}
+};
 
 function initForm() {
     const today = new Date();
@@ -495,7 +600,6 @@ function initForm() {
     toggleButtons("create");
 }
 
-// --- 7. DRAFT SAVE & RESTORE ---
 let draftTimer = null;
 function scheduleDraftSave() {
     if (!currentUser || currentReportId) return;
@@ -503,7 +607,7 @@ function scheduleDraftSave() {
     draftTimer = setTimeout(() => {
         try {
             const data = getFormData();
-            localStorage.setItem(`smvs_report_draft:${currentUser.id}`, JSON.stringify({
+            localStorage.setItem(`smvs_report_draft:${currentUser.username}`, JSON.stringify({
                 savedAt: new Date().toISOString(),
                 data
             }));
@@ -513,12 +617,12 @@ function scheduleDraftSave() {
 
 function clearDraft() {
     if (!currentUser) return;
-    localStorage.removeItem(`smvs_report_draft:${currentUser.id}`);
+    localStorage.removeItem(`smvs_report_draft:${currentUser.username}`);
 }
 
 function loadDraftIfAny() {
     if (!currentUser || currentReportId) return false;
-    const raw = localStorage.getItem(`smvs_report_draft:${currentUser.id}`);
+    const raw = localStorage.getItem(`smvs_report_draft:${currentUser.username}`);
     if (!raw) return false;
     try {
         const payload = JSON.parse(raw);
@@ -627,7 +731,7 @@ function applyDataToForm(data) {
                 if (!mainCheck.checked) mainCheck.click();
 
                 const subChecks = document.querySelectorAll(`.sub-cat-${safeId}`);
-                subChecks.forEach((chk) => {
+                subChecks.forEach(chk => {
                     chk.checked = Array.isArray(subs) ? subs.includes(chk.value) : false;
                 });
             }
@@ -637,7 +741,6 @@ function applyDataToForm(data) {
     updateDay();
 }
 
-// --- 8. SAVE, UPDATE & EXPORT ---
 function validateForm() {
     const data = getFormData();
     if (!data.date) return "Date is required! (તારીખ જરૂરી છે!)";
@@ -649,6 +752,7 @@ function validateForm() {
     return null;
 }
 
+// --- 8. CREATE, UPDATE & SYNC IN FIRESTORE ---
 async function saveAndGenerate(type, action) {
     const errMsg = validateForm();
     if (errMsg) {
@@ -656,21 +760,27 @@ async function saveAndGenerate(type, action) {
         return;
     }
 
-    showLoader("SAVING & EXPORTING...");
+    showLoader("SAVING REPORT TO FIRESTORE...");
     const data = getFormData();
 
     try {
         let reportId = currentReportId;
-        if (!reportId) {
-            const res = await authFetch("/api/reports", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data)
-            });
-            const resData = await res.json();
-            if (!resData.ok) throw new Error(resData.error);
-            reportId = resData.id;
+        const isNew = !reportId;
+
+        const payload = {
+            ...data,
+            authorUsername: currentUser.username,
+            authorDisplayName: currentUser.displayName,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        if (isNew) {
+            payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+            const docRef = await db.collection("reports").add(payload);
+            reportId = docRef.id;
             clearDraft();
+        } else {
+            await db.collection("reports").doc(reportId).set(payload, { merge: true });
         }
 
         const d = new Date(data.date);
@@ -680,161 +790,298 @@ async function saveAndGenerate(type, action) {
         const fname = `${dayStr} ${monthStr}_${yearStr}_${data.occasion}_${data.location}`;
 
         if (type === "pdf") {
-            await handlePDF(data, fname, action);
+            await generatePDFDocument(data, fname, action);
         } else {
-            handleWord(data, fname, action);
+            generateWordDocument(data, fname, action);
+        }
+
+        // Background sync to Google Sheet
+        syncToGoogleSheet(reportId, data).catch(console.warn);
+
+        // First-time creation email
+        if (isNew) {
+            sendEmailNotification(reportId, data).catch(console.warn);
         }
 
         await fetchReports();
         alert("Report Saved Successfully! 🎉");
         showDashboard();
     } catch (e) {
-        alert("Error: " + e.message);
+        alert("Error saving report: " + e.message);
     } finally {
         hideLoader();
     }
 }
 
-async function updateDataOnly() {
+window.handlePDF = function(action) {
+    return saveAndGenerate("pdf", action);
+};
+
+window.handleWord = function(action) {
+    return saveAndGenerate("word", action);
+};
+
+window.updateReportData = async function() {
     const errMsg = validateForm();
     if (errMsg) {
         alert(errMsg);
         return;
     }
+    if (!currentReportId) return;
 
     showLoader("UPDATING REPORT...");
     const data = getFormData();
-
     try {
-        const res = await authFetch(`/api/reports/${currentReportId}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data)
-        });
-        const resData = await res.json();
-        if (!resData.ok) throw new Error(resData.error);
+        await db.collection("reports").doc(currentReportId).set({
+            ...data,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
 
+        syncToGoogleSheet(currentReportId, data).catch(console.warn);
         await fetchReports();
-        alert("Report Updated Successfully! ✅");
-        showHistory();
+        alert("Report Updated Successfully! 🎉");
+        showDashboard();
     } catch (e) {
         alert("Error: " + e.message);
     } finally {
         hideLoader();
     }
+};
+
+// --- 9. APPS SCRIPT & EMAIL NOTIFICATIONS ---
+async function syncToGoogleSheet(reportId, data) {
+    if (!APPS_SCRIPT_WEBAPP_URL) return;
+    try {
+        let cats = data.categories || {};
+        if (typeof cats === "string") {
+            try { cats = JSON.parse(cats); } catch(e) { cats = {}; }
+        }
+        const catParts = [];
+        for (const [k, v] of Object.entries(cats)) {
+            const subStr = Array.isArray(v) ? v.join(", ") : String(v || "");
+            if (subStr) catParts.push(`${k}: ${subStr}`);
+            else catParts.push(k);
+        }
+        const catText = catParts.join(" | ") || "-";
+
+        let plainBody = "";
+        if (data.htmlBody) {
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = data.htmlBody;
+            plainBody = (tempDiv.innerText || tempDiv.textContent || "").trim();
+        }
+
+        await fetch(APPS_SCRIPT_WEBAPP_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                token: APPS_SCRIPT_TOKEN,
+                reportId,
+                date: data.date,
+                day: data.day,
+                time: `${data.startTime} - ${data.endTime}`,
+                grade: data.grade,
+                occasion: data.occasion,
+                country: data.countryName || "",
+                zone: data.zone || "",
+                center: data.center || "",
+                location: data.location,
+                divyavani: data.divyavani,
+                subject: data.subject,
+                category: catText,
+                categories: catText,
+                reportNarrative: plainBody,
+                body: plainBody
+            })
+        });
+    } catch (e) {
+        console.warn("Sheet sync error:", e);
+    }
 }
 
-// --- 9. EXACT ORIGINAL PDF & WORD GENERATION ---
+async function sendEmailNotification(reportId, data) {
+    if (!window.emailjs || !EMAILJS_PUBLIC_KEY) return;
+    try {
+        const downloadUrl = `${APP_DOWNLOAD_BASE_URL}/report.html?id=${reportId}`;
+        await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+            to_email: EMAILJS_TO_EMAIL,
+            report_id: reportId,
+            date: data.date,
+            location: data.location,
+            subject: data.subject,
+            download_url: downloadUrl
+        });
+    } catch (e) {
+        console.warn("Email error:", e);
+    }
+}
+
+// --- 10. PDF & WORD GENERATORS (WORD-MATCHING PDF FORMAT) ---
 function getCleanPreviewHTML(data, isForDownload = false) {
+    if (!data) return "";
+
+    const dateParts = String(data.date || "").split("-");
+    const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : (data.date || "");
+
+    const startTime = data.startTime || data.start_time || "";
+    const endTime = data.endTime || data.end_time || "";
+    const htmlBody = data.htmlBody || data.html_body || "";
+    const subject = data.subject || "";
+    const occasion = data.occasion || "";
+    const location = data.location || "";
+    const day = data.day || "";
+    const grade = data.grade || "A";
+    const divyavani = data.divyavani || "વ્હાલા ગુરુજી";
+
+    let cats = data.categories || {};
+    if (typeof cats === "string") {
+        try { cats = JSON.parse(cats); } catch(e) { cats = {}; }
+    }
+    if (data.categories_json && typeof data.categories_json === "string") {
+        try { cats = JSON.parse(data.categories_json); } catch(e) {}
+    }
+
     let catHtml = "";
-    if (data.categories) {
-        for (const [main, subs] of Object.entries(data.categories)) {
-            if (subs && subs.length > 0) {
-                catHtml += `<div style="margin-bottom:2px; font-size:12px;"><b>${main}:</b> ${subs.join(", ")}</div>`;
+    if (cats && typeof cats === "object") {
+        for (const [main, subs] of Object.entries(cats)) {
+            const subList = Array.isArray(subs) ? subs.join(", ") : (subs || "");
+            if (subList) {
+                catHtml += `<div style="margin: 1px 0; font-size: 10pt;"><b>${main}:</b> ${subList}</div>`;
             }
         }
     }
-
-    const dateParts = (data.date || "").split("-");
-    const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : data.date;
-
-    const zoneCenterRow = (!isForDownload && data.zone && data.center) ? `
-        <tr><td><b>ઝોન:</b> ${data.zone}</td><td><b>સેન્ટર:</b> ${data.center}</td></tr>
-    ` : "";
+    if (!catHtml) catHtml = '<div style="margin: 1px 0; font-size: 10pt;">-</div>';
 
     return `
-    <div style="font-family: 'Hind Vadodara', 'Noto Sans Gujarati', sans-serif; padding: 0; color: #000000 !important; background-color: #ffffff !important; font-size: 14px; width: 96%; margin: 0 auto; box-sizing: border-box;">
+    <div id="pdfRenderRoot" style="font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; padding: 0; margin: 0 auto; color: #000000 !important; background: #ffffff !important; font-size: 10.5pt; width: 680px; box-sizing: border-box;">
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Hind+Vadodara:wght@400;500;600;700&display=swap');
-            * { font-family: 'Hind Vadodara', 'Noto Sans Gujarati', sans-serif !important; }
-            table { width: 100%; border-collapse: collapse; border: 2px solid #000; background-color: #ffffff !important; }
-            td, th { border: 1px solid #000; padding: 6px 8px; vertical-align: top; color: #000000 !important; font-size: 13.5px; }
-            tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-            .report-narrative-cell {
-                border: 2px solid #000 !important;
+            #pdfRenderRoot, #pdfRenderRoot * {
+                font-family: 'Hind Vadodara', Arial, sans-serif !important;
+                box-sizing: border-box !important;
+                color: #000000 !important;
+            }
+            #pdfRenderRoot b, #pdfRenderRoot strong { font-weight: 700 !important; }
+            .hdr-table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                border: 1.5px solid #000000 !important;
+                margin: 0 !important;
+                box-sizing: border-box !important;
+            }
+            .hdr-table td {
+                border: 1px solid #000000 !important;
+                padding: 4px 7px !important;
+                vertical-align: top !important;
+                font-size: 10.5pt !important;
+                font-weight: 500 !important;
+                line-height: 1.4 !important;
+                box-sizing: border-box !important;
+            }
+            .hdr-title {
+                text-align: center !important;
+                padding: 8px 7px !important;
+                border-bottom: 1.5px solid #000000 !important;
+            }
+            .section-bar {
+                width: 100% !important;
+                background: #f0f0f0 !important;
+                font-weight: 700 !important;
+                font-size: 10.5pt !important;
+                padding: 5px 8px !important;
+                border-left: 1.5px solid #000000 !important;
+                border-right: 1.5px solid #000000 !important;
                 border-top: none !important;
-                padding: 12px 16px !important;
-                text-align: justify;
-                line-height: 1.85 !important;
-                letter-spacing: 0.15px;
-                font-size: 14px;
-                background-color: #ffffff !important;
-                color: #000000 !important;
+                border-bottom: 1px solid #000000 !important;
+                box-sizing: border-box !important;
+                margin: 0 !important;
             }
-            .report-narrative-cell * { 
-                color: #000000 !important;
-                line-height: 1.85 !important;
+            .body-content {
+                width: 100% !important;
+                border-left: 1.5px solid #000000 !important;
+                border-right: 1.5px solid #000000 !important;
+                border-bottom: 1.5px solid #000000 !important;
+                border-top: none !important;
+                padding: 8px 10px !important;
+                text-align: justify !important;
+                line-height: 1.55 !important;
+                font-size: 10.5pt !important;
+                font-weight: 500 !important;
+                box-sizing: border-box !important;
+                margin: 0 !important;
+                min-height: 30px;
             }
-            .report-narrative-cell p, .report-narrative-cell li, .report-narrative-cell div {
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                margin-bottom: 8px;
+            .body-content ul, .body-content ol {
+                padding-left: 20px !important;
+                margin: 3px 0 6px 0 !important;
             }
-            .report-narrative-cell ul, .report-narrative-cell ol {
-                margin-top: 4px;
-                margin-bottom: 8px;
-                padding-left: 22px;
+            .body-content li {
+                margin-bottom: 2px !important;
+                line-height: 1.5 !important;
+            }
+            .body-content p {
+                margin: 2px 0 !important;
             }
         </style>
-        <table>
-            <tbody>
-                <tr><td colspan="2" style="border: 2px solid #000; padding: 10px; text-align: center;"><h2 style="font-size: 20px; color: #000000; margin: 0; text-transform: uppercase; font-weight: 700;">SMVS SAMARPAN KARYALYA</h2><p style="font-size: 11px; color: #000000; margin: 0;">Video Post Production Data Report</p></td></tr>
-                <tr><td style="width: 50%;"><b>તારીખ:</b> ${formattedDate}</td><td style="width: 50%;"><b>વાર:</b> ${data.day}</td></tr>
-                <tr><td><b>સમય:</b> ${data.startTime} થી ${data.endTime}</td><td><b>ગ્રેડ:</b> ${data.grade}</td></tr>
-                ${zoneCenterRow}
-                <tr><td><b>પ્રસંગ:</b> ${data.occasion}</td><td><b>સ્થળ:</b> ${data.location}</td></tr>
-                <tr><td colspan="2"><b>દિવ્યવાણી:</b> ${data.divyavani}</td></tr>
-                <tr><td colspan="2"><b>સભાનો વિષય:</b><br/>${data.subject}</td></tr>
-                <tr><td colspan="2"><b>કેટેગરી:</b><br/>${catHtml}</td></tr>
-                <tr><td colspan="2" style="font-weight: bold; background-color: #f0f0f0 !important; color: #000000 !important;">કથાવાર્તા અહેવાલ</td></tr>
-                <tr>
-                    <td colspan="2" class="report-narrative-cell">
-                        ${data.htmlBody || ""}
-                    </td>
-                </tr>
-            </tbody>
+
+        <!-- HEADER TABLE -->
+        <table class="hdr-table">
+            <tr>
+                <td colspan="2" class="hdr-title">
+                    <div style="font-size: 15pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; margin: 0;">SMVS SAMARPAN KARYALYA</div>
+                    <div style="font-size: 9pt; font-weight: 500; margin: 2px 0 0 0;">Video Post Production Data Report</div>
+                </td>
+            </tr>
+            <tr>
+                <td style="width: 50%;"><b>તારીખ:</b> ${formattedDate}</td>
+                <td style="width: 50%;"><b>વાર:</b> ${day}</td>
+            </tr>
+            <tr>
+                <td><b>સમય:</b> ${startTime} થી ${endTime}</td>
+                <td><b>ગ્રેડ:</b> ${grade}</td>
+            </tr>
+            <tr>
+                <td><b>પ્રસંગ:</b> ${occasion}</td>
+                <td><b>સ્થળ:</b> ${location}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>દિવ્યવાણી:</b> ${divyavani}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>સભાનો વિષય:</b> ${subject || "-"}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>કેટેગરી:</b><br/>${catHtml}</td>
+            </tr>
         </table>
+
+        <!-- SECTION BAR -->
+        <div class="section-bar">કથાવાર્તા અહેવાલ</div>
+
+        <!-- BODY CONTENT -->
+        <div class="body-content">${htmlBody || "<p>-</p>"}</div>
     </div>`;
 }
 
-function getWordContent(data) {
-    let catHtml = "";
-    if (data.categories) {
-        for (const [main, subs] of Object.entries(data.categories)) {
-            if (subs && subs.length > 0) {
-                catHtml += `<p style="margin:0;"><b>${main}:</b> ${subs.join(", ")}</p>`;
-            }
-        }
-    }
-
-    const dateParts = (data.date || "").split("-");
-    const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : data.date;
-
-    return `<!DOCTYPE html><html><head><meta charset='utf-8'><style>body { font-family: Arial, sans-serif; } table { border-collapse: collapse; width: 100%; border: 1px solid black; } td { border: 1px solid black; padding: 5px; vertical-align: top; } h2, p { margin: 0; }</style></head><body><table border="1" cellspacing="0" cellpadding="5" width="100%"><tr><td colspan="2" align="center" style="border-bottom: 2px solid black; padding: 10px;"><h2 style="font-size: 18pt; color:#d35400;">SMVS SAMARPAN KARYALYA</h2><p style="font-size: 10pt;">Video Post Production Data Report</p></td></tr><tr><td width="50%"><b>Date:</b> ${formattedDate}</td><td width="50%"><b>Day:</b> ${data.day}</td></tr><tr><td><b>Time:</b> ${data.startTime} - ${data.endTime}</td><td><b>Grade:</b> ${data.grade}</td></tr><tr><td><b>Occasion:</b> ${data.occasion}</td><td><b>Location:</b> ${data.location}</td></tr><tr><td colspan="2"><b>Divyavani:</b> ${data.divyavani}</td></tr><tr><td colspan="2"><b>Subject:</b><br/>${data.subject}</td></tr><tr><td colspan="2"><b>Categories:</b><br/>${catHtml}</td></tr><tr><td colspan="2" style="background-color:#f0f0f0;"><b>Report Body:</b></td></tr><tr><td colspan="2" style="padding: 10px;">${data.htmlBody}</td></tr></table></body></html>`;
-}
-
-async function handlePDF(data, fileName, action) {
-    if (document.fonts && document.fonts.ready) {
-        await document.fonts.ready;
-    }
+async function generatePDFDocument(data, fileName, action = "download") {
     const content = getCleanPreviewHTML(data, true);
+
     const opt = {
-        margin: 0.3,
+        margin: [10, 10, 10, 10], // 10mm margin on all 4 sides
         filename: fileName + ".pdf",
         image: { type: "jpeg", quality: 0.98 },
         html2canvas: {
             scale: 2,
             useCORS: true,
             scrollY: 0,
-            backgroundColor: "#ffffff",
-            letterRendering: false
+            logging: false,
+            letterRendering: true
         },
-        jsPDF: { unit: "in", format: "a4", orientation: "portrait" },
-        pagebreak: {
-            mode: ["avoid-all", "css", "legacy"],
-            avoid: ["tr", "p", "li", "h1", "h2", "h3", "h4", "h5", "h6"]
-        }
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        pagebreak: { mode: ["css", "legacy"] }
     };
+
     const worker = html2pdf().set(opt).from(content);
     if (action === "download") {
         await worker.save();
@@ -844,31 +1091,138 @@ async function handlePDF(data, fileName, action) {
     }
 }
 
-function handleWord(data, fileName, action) {
+function getWordContent(data) {
+    let catHtml = "";
+    if (data.categories) {
+        for (const [main, subs] of Object.entries(data.categories)) {
+            const subText = Array.isArray(subs) ? subs.join(", ") : (subs || "");
+            if (subText) {
+                catHtml += `<p style="margin: 0; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500;"><b>${main}:</b> ${subText}</p>`;
+            }
+        }
+    }
+    const dateParts = String(data.date || "").split("-");
+    const formattedDate = dateParts.length === 3 ? `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}` : (data.date || "");
+
+    return `<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Hind+Vadodara:wght@400;500;600;700&display=swap');
+            body { font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; font-size: 11pt; color: #000; }
+            table { border-collapse: collapse; width: 100%; border: 1.5px solid black; }
+            td { border: 1px solid black; padding: 5px; vertical-align: top; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; }
+            h2 { margin: 0; font-weight: 700; font-family: 'Hind Vadodara', Arial, sans-serif; }
+            p { margin: 0; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; }
+            ul, ol { margin: 4px 0; padding-left: 20px; }
+            li { margin-bottom: 2px; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500; }
+        </style>
+    </head>
+    <body>
+        <table border="1" cellspacing="0" cellpadding="5" width="100%">
+            <tr>
+                <td colspan="2" align="center" style="border-bottom: 2px solid black; padding: 10px;">
+                    <h2 style="font-size: 18pt; color: #000000; text-transform: uppercase;">SMVS SAMARPAN KARYALYA</h2>
+                    <p style="font-size: 10pt;">Video Post Production Data Report</p>
+                </td>
+            </tr>
+            <tr>
+                <td width="50%"><b>Date:</b> ${formattedDate}</td>
+                <td width="50%"><b>Day:</b> ${data.day || ""}</td>
+            </tr>
+            <tr>
+                <td><b>Time:</b> ${data.startTime || ""} - ${data.endTime || ""}</td>
+                <td><b>Grade:</b> ${data.grade || ""}</td>
+            </tr>
+            <tr>
+                <td><b>Occasion:</b> ${data.occasion || ""}</td>
+                <td><b>Location:</b> ${data.location || ""}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Divyavani:</b> ${data.divyavani || ""}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Subject:</b><br/>${data.subject || ""}</td>
+            </tr>
+            <tr>
+                <td colspan="2"><b>Categories:</b><br/>${catHtml || "-"}</td>
+            </tr>
+            <tr>
+                <td colspan="2" style="background-color: #f0f0f0; font-weight: bold;"><b>Report Body:</b></td>
+            </tr>
+            <tr>
+                <td colspan="2" style="padding: 10px; font-family: 'Hind Vadodara', Arial, sans-serif; font-weight: 500;">
+                    ${data.htmlBody || ""}
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>`;
+}
+
+function generateWordDocument(data, fileName, action = "download") {
     const htmlContent = getWordContent(data);
     const converted = htmlDocx.asBlob(htmlContent, {
         orientation: "portrait",
         margins: { top: 720, bottom: 720, left: 720, right: 720 }
     });
-    if (action === "download") saveAs(converted, fileName + ".docx");
-    else if (action === "share") {
+    if (action === "download") {
+        saveAs(converted, fileName + ".docx");
+    } else if (action === "share") {
         shareFile(converted, fileName + ".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     }
 }
 
 async function shareFile(blob, filename, mimeType) {
-    const file = new File([blob], filename, { type: mimeType });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-            await navigator.share({ files: [file], title: "SMVS Report", text: filename });
-        } catch (err) {}
-    } else {
-        alert("Downloading (Share not supported on this browser)");
-        saveAs(blob, filename);
+    try {
+        const file = new File([blob], filename, { type: mimeType });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: "SMVS Sabha Report",
+                    text: filename
+                });
+                return;
+            } catch (err) {
+                if (err.name === "AbortError") return; // User dismissed share sheet
+                console.warn("Native share error, falling back to download:", err);
+            }
+        }
+
+        // Fallback for browsers without file sharing (e.g. desktop)
+        if (typeof saveAs === "function") {
+            saveAs(blob, filename);
+        } else {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
+    } catch (e) {
+        console.warn("Share fallback error:", e);
+        if (typeof saveAs === "function") {
+            saveAs(blob, filename);
+        }
     }
 }
 
-// --- 10. PREVIEW REPORT ---
+window.handlePDF = function(action) {
+    return saveAndGenerate("pdf", action);
+};
+
+window.handleWord = function(action) {
+    return saveAndGenerate("word", action);
+};
+
+
 window.previewReport = function(source, id = null) {
     let data;
     if (source === "form") {
@@ -878,10 +1232,17 @@ window.previewReport = function(source, id = null) {
     }
     if (!data) return;
     document.getElementById("previewContent").innerHTML = getCleanPreviewHTML(data, false);
+    if (!previewModal) {
+        previewModal = new bootstrap.Modal(document.getElementById("previewModal"));
+    }
     previewModal.show();
 };
 
-// --- 11. EXACT ORIGINAL HISTORY VIEW & FILTER ---
+window.handlePreview = function() {
+    previewReport("form");
+};
+
+// --- 12. HISTORY VIEW & FILTERING ---
 window.showHistory = function() {
     document.getElementById("dashboardView").classList.add("d-none");
     document.getElementById("formView").classList.add("d-none");
@@ -890,30 +1251,78 @@ window.showHistory = function() {
     renderHistory(allReports);
 };
 
-window.filterReports = function() {
-    const fDate = document.getElementById("filterDate").value;
-    const fCountry = parseInt(document.getElementById("filterCountry").value) || null;
-    const fZone = parseInt(document.getElementById("filterZone").value) || null;
-    const fCenter = parseInt(document.getElementById("filterCenter").value) || null;
+async function fetchReports(force = false) {
+    try {
+        const snap = await db.collection("reports").get();
+        allReports = [];
+        snap.forEach(doc => {
+            const data = doc.data();
+            allReports.push({ id: doc.id, ...data });
+        });
+        
+        // Robust sort descending by date / timestamp / createdAt
+        allReports.sort((a, b) => {
+            const getTimestamp = (r) => {
+                if (r.createdAt?.toDate) return r.createdAt.toDate().getTime();
+                if (r.timestamp?.toDate) return r.timestamp.toDate().getTime();
+                if (r.createdAt) return new Date(r.createdAt).getTime();
+                if (r.timestamp) return new Date(r.timestamp).getTime();
+                if (r.date) return new Date(r.date).getTime();
+                return 0;
+            };
+            return getTimestamp(b) - getTimestamp(a);
+        });
 
-    const fOccasionRaw = document.getElementById("filterOccasion").value.toLowerCase().trim();
-    const fLocationRaw = document.getElementById("filterLocation").value.toLowerCase().trim();
-    const fOccasionSmart = normalizeText(fOccasionRaw);
-    const fLocationSmart = normalizeText(fLocationRaw);
+        console.log("Total reports loaded from Firestore:", allReports.length);
+    } catch (e) {
+        console.warn("Error fetching reports from Firestore:", e);
+    }
+    updateDashboardUI();
+    renderHistory(allReports);
+}
+
+window.closeMobileNav = function() {
+    const navEl = document.getElementById("smvsNavbarNav");
+    if (navEl && navEl.classList.contains("show") && typeof bootstrap !== "undefined") {
+        const bsCollapse = bootstrap.Collapse.getInstance(navEl) || new bootstrap.Collapse(navEl);
+        bsCollapse.hide();
+    }
+};
+
+function normalizeText(text) {
+    if (!text) return "";
+    let s = text.toLowerCase().trim();
+    const map = {
+        'ક': 'k', 'ખ': 'kh', 'ગ': 'g', 'ઘ': 'gh', 'ચ': 'ch', 'છ': 'chh',
+        'જ': 'j', 'ઝ': 'z', 'ટ': 't', 'ઠ': 'th', 'ડ': 'd', 'ઢ': 'dh',
+        'ણ': 'n', 'ત': 't', 'થ': 'th', 'દ': 'd', 'ધ': 'dh', 'ન': 'n',
+        'પ': 'p', 'ફ': 'f', 'બ': 'b', 'ભ': 'bh', 'મ': 'm', 'ય': 'y',
+        'ર': 'r', 'લ': 'l', 'વ': 'v', 'શ': 's', 'ષ': 'sh', 'સ': 's', 'હ': 'h'
+    };
+    for (const [gu, en] of Object.entries(map)) {
+        s = s.split(gu).join(en);
+    }
+    return s.replace(/[\u0ABE-\u0ACF]/g, "").replace(/w/g, "v").replace(/ee/g, "i").replace(/oo/g, "u").replace(/sh/g, "s");
+}
+
+window.filterReports = function() {
+    const dateVal = document.getElementById("filterDate").value;
+    const countryVal = document.getElementById("filterCountry").value;
+    const zoneSelect = document.getElementById("filterZone");
+    const zoneVal = zoneSelect.options[zoneSelect.selectedIndex]?.textContent;
+    const cntSelect = document.getElementById("filterCenter");
+    const centerVal = cntSelect.options[cntSelect.selectedIndex]?.textContent;
+    const occVal = normalizeText(document.getElementById("filterOccasion").value);
+    const locVal = normalizeText(document.getElementById("filterLocation").value);
 
     const filtered = allReports.filter(r => {
-        const dateMatch = fDate ? r.date === fDate : true;
-        const countryMatch = fCountry ? r.countryId === fCountry : true;
-        const zoneMatch = fZone ? r.zoneId === fZone : true;
-        const centerMatch = fCenter ? r.centerId === fCenter : true;
-
-        const rOcc = (r.occasion || "").toLowerCase();
-        const occasionMatch = !fOccasionRaw || rOcc.includes(fOccasionRaw) || normalizeText(rOcc).includes(fOccasionSmart);
-
-        const rLoc = (r.location || "").toLowerCase();
-        const locationMatch = !fLocationRaw || rLoc.includes(fLocationRaw) || normalizeText(rLoc).includes(fLocationSmart);
-
-        return dateMatch && countryMatch && zoneMatch && centerMatch && occasionMatch && locationMatch;
+        if (dateVal && r.date !== dateVal) return false;
+        if (countryVal && String(r.countryId) !== String(countryVal)) return false;
+        if (zoneVal && zoneVal !== "All Zones" && (r.zone || "").toLowerCase() !== zoneVal.toLowerCase()) return false;
+        if (centerVal && centerVal !== "All Centers" && (r.center || "").toLowerCase() !== centerVal.toLowerCase()) return false;
+        if (occVal && !normalizeText(r.occasion || "").includes(occVal)) return false;
+        if (locVal && !normalizeText(r.location || "").includes(locVal)) return false;
+        return true;
     });
 
     renderHistory(filtered);
@@ -923,28 +1332,28 @@ function renderHistory(reports) {
     const list = document.getElementById("historyList");
     if (!list) return;
 
-    if (reports.length === 0) {
-        list.innerHTML = '<p class="text-center text-muted mt-4">No results.</p>';
+    if (!reports || reports.length === 0) {
+        list.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="fa-solid fa-inbox fa-3x mb-3 d-block"></i>No reports found.</div>';
         return;
     }
 
     let html = "";
     reports.forEach(r => {
         const dateObj = new Date(r.date);
-        const dateDisplay = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${dateObj.getFullYear()}`;
+        const dateDisplay = !isNaN(dateObj) ? `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${dateObj.getFullYear()}` : r.date;
 
         html += `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="card h-100 btn-card">
                 <div class="card-header d-flex justify-content-between align-items-center py-3">
                     <div>
-                        <h6 class="mb-0 fw-bold" style="color: var(--primary);">${r.location}</h6>
-                        <small class="text-muted">${dateDisplay} | ${r.day}</small>
+                        <h6 class="mb-0 fw-bold text-primary">${r.location || "Unknown Location"}</h6>
+                        <small class="text-muted">${dateDisplay} | ${r.day || ""}</small>
                     </div>
-                    <span class="badge bg-secondary">${r.grade}</span>
+                    <span class="badge bg-secondary">${r.grade || "A"}</span>
                 </div>
                 <div class="card-body">
-                    <p class="mb-1 text-muted"><strong>Occasion:</strong> ${r.occasion}</p>
+                    <p class="mb-1 text-muted"><strong>Occasion:</strong> ${r.occasion || "-"}</p>
                     <p class="small text-muted text-truncate">${r.subject || "No Subject"}</p>
                 </div>
                 <div class="card-footer border-0 py-3" style="background-color: var(--bg-body);">
@@ -974,20 +1383,28 @@ function renderHistory(reports) {
 
 window.downloadFromHistory = function(id, type, action) {
     const report = allReports.find(r => String(r.id) === String(id));
-    if (!report) return;
+    if (!report) {
+        alert("Report not found!");
+        return;
+    }
 
-    const d = new Date(report.date);
-    const dayStr = String(d.getDate()).padStart(2, "0");
-    const monthStr = d.toLocaleString("en-US", { month: "short" });
-    const yearStr = d.getFullYear();
-    const fname = `${dayStr} ${monthStr}_${yearStr}_${report.occasion}_${report.location}`;
+    const d = new Date(report.date || Date.now());
+    const dayStr = !isNaN(d) ? String(d.getDate()).padStart(2, "0") : "01";
+    const monthStr = !isNaN(d) ? d.toLocaleString("en-US", { month: "short" }) : "Report";
+    const yearStr = !isNaN(d) ? d.getFullYear() : "2026";
+    const fname = `${dayStr} ${monthStr}_${yearStr}_${report.occasion || 'Sabha'}_${report.location || 'Report'}`;
 
-    showLoader("PROCESSING...");
-    if (type === "pdf") {
-        handlePDF(report, fname, action).finally(hideLoader);
-    } else {
-        handleWord(report, fname, action);
+    showLoader("PREPARING EXPORT...");
+    try {
+        if (type === "pdf") {
+            generatePDFDocument(report, fname, action).finally(hideLoader);
+        } else {
+            generateWordDocument(report, fname, action);
+            hideLoader();
+        }
+    } catch (err) {
         hideLoader();
+        alert("Export error: " + err.message);
     }
 };
 
@@ -1008,15 +1425,13 @@ window.editReport = function(id) {
 };
 
 window.deleteReport = async function(id) {
-    if (!confirm("Delete?")) return;
-    showLoader("DELETING...");
+    if (!confirm("Are you sure you want to delete this report?")) return;
+    showLoader("DELETING FROM FIRESTORE...");
     try {
-        const res = await authFetch(`/api/reports/${id}`, { method: "DELETE" });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error);
-
+        await db.collection("reports").doc(id).delete();
         allReports = allReports.filter(r => String(r.id) !== String(id));
         renderHistory(allReports);
+        updateDashboardUI();
     } catch (e) {
         alert("Error: " + e.message);
     } finally {
@@ -1024,7 +1439,7 @@ window.deleteReport = async function(id) {
     }
 };
 
-// --- 12. NAVIGATION & UI HELPERS ---
+// --- 13. NAVIGATION HELPERS ---
 window.showDashboard = function() {
     document.getElementById("formView").classList.add("d-none");
     document.getElementById("historyView").classList.add("d-none");
@@ -1049,19 +1464,21 @@ window.showForm = function() {
 };
 
 function toggleButtons(mode) {
-    const createBtns = document.getElementById("createButtons");
-    const updateBtns = document.getElementById("updateButtons");
+    const createBtns = document.getElementById("createActionButtons");
+    const editBtns = document.getElementById("editActionButtons");
     if (mode === "edit") {
         createBtns.classList.add("d-none");
-        updateBtns.classList.remove("d-none");
+        editBtns.classList.remove("d-none");
+        editBtns.classList.add("d-flex");
     } else {
         createBtns.classList.remove("d-none");
-        updateBtns.classList.add("d-none");
+        editBtns.classList.add("d-none");
+        editBtns.classList.remove("d-flex");
     }
 }
 
 window.resetForm = function(force = false) {
-    if (force && !confirm("Clear Form?")) return;
+    if (force && !confirm("Are you sure you want to Clear the Form?")) return;
     clearDraft();
     document.getElementById("reportForm").reset();
     if (quill) quill.setContents([]);
@@ -1084,43 +1501,7 @@ function hideLoader() {
     if (el) el.classList.add("d-none");
 }
 
-// --- 13. EXACT ORIGINAL GUJARATI-ENGLISH TRANSLITERATION ---
-function normalizeText(text) {
-    if (!text) return "";
-    text = text.toLowerCase().trim();
-    text = text.replace(/w/g, 'v');
-    text = text.replace(/ee/g, 'i').replace(/oo/g, 'u').replace(/sh/g, 's');
-
-    const map = {
-        'ક': 'k', 'ખ': 'kh', 'ગ': 'g', 'ઘ': 'gh',
-        'ચ': 'ch', 'છ': 'chh', 'જ': 'j', 'ઝ': 'z',
-        'ટ': 't', 'ઠ': 'th', 'ડ': 'd', 'ઢ': 'dh', 'ણ': 'n',
-        'ત': 't', 'થ': 'th', 'દ': 'd', 'ધ': 'dh', 'ન': 'n',
-        'પ': 'p', 'ફ': 'f', 'બ': 'b', 'ભ': 'bh', 'મ': 'm',
-        'ય': 'y', 'ર': 'r', 'લ': 'l', 'વ': 'v',
-        'શ': 's', 'ષ': 's', 'સ': 's', 'હ': 'h', 'ળ': 'l',
-        'ક્ષ': 'x', 'જ્ઞ': 'gn',
-        'ા': 'a', 'િ': 'i', 'ી': 'i', 'ુ': 'u', 'ૂ': 'u',
-        'ે': 'e', 'ૈ': 'ai', 'ો': 'o', 'ૌ': 'au', 'ં': 'n', 'ઃ': 'h'
-    };
-
-    let englishStr = "";
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-        englishStr += map[char] || char;
-    }
-
-    return englishStr
-        .replace(/w/g, 'v')
-        .replace(/sh/g, 's')
-        .replace(/[aeiou]/g, '');
-}
-
-// --- 14. ADMIN PANEL CONTROLLER (SELECTION-BASED MASTER DETAIL) ---
-let adminSelectedCountryId = null;
-let adminSelectedZoneId = null;
-let adminSelectedCategoryId = null;
-
+// --- 14. ADMIN MANAGEMENT CONSOLE (LOCATIONS, CATEGORIES, USERS) ---
 window.showAdminPanel = function() {
     if (currentUser?.role !== "admin") return;
     document.getElementById("dashboardView").classList.add("d-none");
@@ -1142,7 +1523,7 @@ window.switchAdminTab = async function(tab) {
     if (activeBtn) activeBtn.classList.add("active");
 
     const content = document.getElementById("adminTabContent");
-    showLoader("LOADING...");
+    showLoader("LOADING ADMIN PANEL...");
 
     try {
         if (tab === "locations") await renderAdminLocations(content);
@@ -1157,14 +1538,10 @@ window.switchAdminTab = async function(tab) {
 
 // Selection-Based Cascading Locations: Country -> Zone -> Center
 async function renderAdminLocations(container) {
-    const res = await fetch("/api/locations/tree");
-    const data = await res.json();
-    const tree = data.tree || [];
-
-    if (tree.length > 0 && !adminSelectedCountryId) {
-        adminSelectedCountryId = tree[0].id;
+    if (locationTree.length > 0 && !adminSelectedCountryId) {
+        adminSelectedCountryId = locationTree[0].id;
     }
-    const currentCountry = tree.find(c => c.id === adminSelectedCountryId) || tree[0];
+    const currentCountry = locationTree.find(c => c.id === adminSelectedCountryId) || locationTree[0];
 
     const zones = currentCountry?.zones || [];
     if (zones.length > 0 && (!adminSelectedZoneId || !zones.some(z => z.id === adminSelectedZoneId))) {
@@ -1180,7 +1557,7 @@ async function renderAdminLocations(container) {
             <div class="card p-3 h-100">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="text-primary fw-bold mb-0"><i class="fa-solid fa-earth-asia me-2"></i>1. Country (દેશ)</h6>
-                    <span class="badge bg-secondary">${tree.length}</span>
+                    <span class="badge bg-secondary">${locationTree.length}</span>
                 </div>
                 <form onsubmit="addCountry(event)" class="mb-3">
                     <div class="input-group">
@@ -1189,11 +1566,11 @@ async function renderAdminLocations(container) {
                     </div>
                 </form>
                 <div class="overflow-y-auto" style="max-height: 480px;">
-                    ${tree.map(c => `
+                    ${locationTree.map(c => `
                         <div class="admin-list-item ${c.id === currentCountry?.id ? 'active' : ''}" onclick="selectAdminCountry(${c.id})">
                             <div>
                                 <span class="fw-bold">${c.name}</span>
-                                <small class="d-block text-muted">${c.zones.length} Zones</small>
+                                <small class="d-block text-muted">${(c.zones || []).length} Zones</small>
                             </div>
                             <div class="d-flex align-items-center">
                                 <button class="btn btn-sm btn-outline-warning py-0 px-2 me-1" onclick="event.stopPropagation(); openAdminEdit('country', ${c.id}, '${c.name.replace(/'/g, "\\'")}', '${(c.code||'').replace(/'/g, "\\'")}');" title="Edit Country"><i class="fa-solid fa-pen-to-square fa-xs"></i></button>
@@ -1225,7 +1602,7 @@ async function renderAdminLocations(container) {
                             <div class="admin-list-item ${z.id === currentZone?.id ? 'active' : ''}" onclick="selectAdminZone(${z.id})">
                                 <div>
                                     <span class="fw-bold">${z.name}</span>
-                                    <small class="d-block text-muted">${z.centers.length} Centers</small>
+                                    <small class="d-block text-muted">${(z.centers || []).length} Centers</small>
                                 </div>
                                 <div class="d-flex align-items-center">
                                     <button class="btn btn-sm btn-outline-warning py-0 px-2 me-1" onclick="event.stopPropagation(); openAdminEdit('zone', ${z.id}, '${z.name.replace(/'/g, "\\'")}', '', ${currentCountry.id});" title="Edit Zone"><i class="fa-solid fa-pen-to-square fa-xs"></i></button>
@@ -1285,61 +1662,84 @@ window.addCountry = async function(e) {
     e.preventDefault();
     const name = document.getElementById("newCountryName").value.trim();
     if (!name) return;
-    await authFetch("/api/admin/countries", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
-    await loadLocationsTree();
+    const newId = Date.now();
+    locationTree.push({ id: newId, name, code: "", zones: [] });
+    await saveLocationsTreeToFirestore();
+    populateCountryDropdown();
     switchAdminTab("locations");
 };
+
 window.deleteCountry = async function(id) {
-    if (!confirm("Delete country?")) return;
-    await authFetch(`/api/admin/countries/${id}`, { method: "DELETE" });
+    if (!confirm("Are you sure you want to delete this country?")) return;
+    locationTree = locationTree.filter(c => c.id !== id);
     if (adminSelectedCountryId === id) adminSelectedCountryId = null;
-    await loadLocationsTree();
+    await saveLocationsTreeToFirestore();
+    populateCountryDropdown();
     switchAdminTab("locations");
 };
 
 window.addZone = async function(e, countryId) {
     e.preventDefault();
     const name = document.getElementById("newZoneName").value.trim();
-    if (!countryId || !name) return;
-    await authFetch("/api/admin/zones", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ countryId, name }) });
-    await loadLocationsTree();
-    switchAdminTab("locations");
+    if (!name) return;
+    const country = locationTree.find(c => c.id === countryId);
+    if (country) {
+        if (!country.zones) country.zones = [];
+        country.zones.push({ id: Date.now(), name, centers: [] });
+        await saveLocationsTreeToFirestore();
+        populateCountryDropdown();
+        switchAdminTab("locations");
+    }
 };
+
 window.deleteZone = async function(id) {
-    if (!confirm("Delete zone?")) return;
-    await authFetch(`/api/admin/zones/${id}`, { method: "DELETE" });
+    if (!confirm("Are you sure you want to delete this zone?")) return;
+    locationTree.forEach(c => {
+        if (c.zones) c.zones = c.zones.filter(z => z.id !== id);
+    });
     if (adminSelectedZoneId === id) adminSelectedZoneId = null;
-    await loadLocationsTree();
+    await saveLocationsTreeToFirestore();
+    populateCountryDropdown();
     switchAdminTab("locations");
 };
 
 window.addCenter = async function(e, zoneId) {
     e.preventDefault();
     const name = document.getElementById("newCenterName").value.trim();
-    if (!zoneId || !name) return;
-    await authFetch("/api/admin/centers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ zoneId, name }) });
-    await loadLocationsTree();
+    if (!name) return;
+    locationTree.forEach(c => {
+        (c.zones || []).forEach(z => {
+            if (z.id === zoneId) {
+                if (!z.centers) z.centers = [];
+                z.centers.push({ id: Date.now(), name });
+            }
+        });
+    });
+    await saveLocationsTreeToFirestore();
+    populateCountryDropdown();
     switchAdminTab("locations");
 };
+
 window.deleteCenter = async function(id) {
-    if (!confirm("Delete center?")) return;
-    await authFetch(`/api/admin/centers/${id}`, { method: "DELETE" });
-    await loadLocationsTree();
+    if (!confirm("Are you sure you want to delete this center?")) return;
+    locationTree.forEach(c => {
+        (c.zones || []).forEach(z => {
+            if (z.centers) z.centers = z.centers.filter(cnt => cnt.id !== id);
+        });
+    });
+    await saveLocationsTreeToFirestore();
+    populateCountryDropdown();
     switchAdminTab("locations");
 };
 
-// Selection-Based Categories: Click Main Category on Left -> Shows Subcategories on Right
+// Selection-Based Categories: Main Category -> Subcategories
 async function renderAdminCategories(container) {
-    const res = await authFetch("/api/admin/categories");
-    const data = await res.json();
-    const cats = data.categories || [];
-    const subs = data.subCategories || [];
-
-    if (cats.length > 0 && !adminSelectedCategoryId) {
-        adminSelectedCategoryId = cats[0].id;
+    const catKeys = Object.keys(categoriesData);
+    if (catKeys.length > 0 && (!adminSelectedCategoryId || !categoriesData[adminSelectedCategoryId])) {
+        adminSelectedCategoryId = catKeys[0];
     }
-    const currentCat = cats.find(c => c.id === adminSelectedCategoryId) || cats[0];
-    const catSubs = subs.filter(s => s.category_id === currentCat?.id);
+    const currentCatKey = adminSelectedCategoryId || catKeys[0];
+    const catSubs = categoriesData[currentCatKey] || [];
 
     container.innerHTML = `
     <div class="row g-4">
@@ -1348,7 +1748,7 @@ async function renderAdminCategories(container) {
             <div class="card p-3 h-100">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="text-primary fw-bold mb-0"><i class="fa-solid fa-tags me-2"></i>Main Categories (મુખ્ય કેટેગરી)</h6>
-                    <span class="badge bg-secondary">${cats.length}</span>
+                    <span class="badge bg-secondary">${catKeys.length}</span>
                 </div>
                 <form onsubmit="addCategory(event)" class="mb-3">
                     <div class="input-group">
@@ -1357,17 +1757,17 @@ async function renderAdminCategories(container) {
                     </div>
                 </form>
                 <div class="overflow-y-auto" style="max-height: 480px;">
-                    ${cats.map(c => {
-                        const count = subs.filter(s => s.category_id === c.id).length;
+                    ${catKeys.map(c => {
+                        const count = (categoriesData[c] || []).length;
                         return `
-                        <div class="admin-list-item ${c.id === currentCat?.id ? 'active' : ''}" onclick="selectAdminCategory(${c.id})">
+                        <div class="admin-list-item ${c === currentCatKey ? 'active' : ''}" onclick="selectAdminCategory('${c}')">
                             <div>
-                                <span class="fw-bold">${c.name}</span>
+                                <span class="fw-bold">${c}</span>
                                 <small class="d-block text-muted">${count} Subcategories</small>
                             </div>
                             <div class="d-flex align-items-center">
-                                <button class="btn btn-sm btn-outline-warning py-0 px-2 me-1" onclick="event.stopPropagation(); openAdminEdit('category', ${c.id}, '${c.name.replace(/'/g, "\\'")}');" title="Edit Category"><i class="fa-solid fa-pen-to-square fa-xs"></i></button>
-                                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="event.stopPropagation(); deleteCategory(${c.id});" title="Delete Category"><i class="fa-solid fa-trash fa-xs"></i></button>
+                                <button class="btn btn-sm btn-outline-warning py-0 px-2 me-1" onclick="event.stopPropagation(); openAdminEdit('category', '${c}', '${c.replace(/'/g, "\\'")}')" title="Edit Category"><i class="fa-solid fa-pen-to-square fa-xs"></i></button>
+                                <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="event.stopPropagation(); deleteCategory('${c}');" title="Delete Category"><i class="fa-solid fa-trash fa-xs"></i></button>
                             </div>
                         </div>`;
                     }).join("")}
@@ -1375,30 +1775,30 @@ async function renderAdminCategories(container) {
             </div>
         </div>
 
-        <!-- 2. Subcategories Column (Right - Based on Selected Category) -->
+        <!-- 2. Subcategories Column (Right) -->
         <div class="col-12 col-md-7">
             <div class="card p-3 h-100">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h6 class="text-primary fw-bold mb-0">
-                        <i class="fa-solid fa-list-check me-2"></i>Sub-Categories of <span class="text-warning">"${currentCat ? currentCat.name : ''}"</span>
+                        <i class="fa-solid fa-list-check me-2"></i>Sub-Categories of <span class="text-warning">"${currentCatKey || ''}"</span>
                     </h6>
                     <span class="badge bg-secondary">${catSubs.length}</span>
                 </div>
-                ${currentCat ? `
-                    <form onsubmit="addSubCategory(event, ${currentCat.id})" class="mb-3">
+                ${currentCatKey ? `
+                    <form onsubmit="addSubCategory(event, '${currentCatKey}')" class="mb-3">
                         <div class="input-group">
-                            <input type="text" id="newSubCatName" class="form-control" placeholder="Add Sub-Category in ${currentCat.name}..." required>
+                            <input type="text" id="newSubCatName" class="form-control" placeholder="Add Sub-Category in ${currentCatKey}..." required>
                             <button class="btn btn-primary" type="submit" title="Add Sub-Category"><i class="fa-solid fa-plus"></i></button>
                         </div>
                     </form>
                     <div class="overflow-y-auto" style="max-height: 480px;">
                         ${catSubs.length === 0 ? '<p class="text-muted small text-center py-4">No sub-categories in this category yet. Add one above!</p>' : ''}
-                        ${catSubs.map(s => `
+                        ${catSubs.map((s, idx) => `
                             <div class="admin-list-item">
-                                <span class="fw-bold">${s.name}</span>
+                                <span class="fw-bold">${s}</span>
                                 <div class="d-flex align-items-center">
-                                    <button class="btn btn-sm btn-outline-warning py-0 px-2 me-1" onclick="openAdminEdit('subcategory', ${s.id}, '${s.name.replace(/'/g, "\\'")}', '', ${currentCat.id});" title="Edit Sub-Category"><i class="fa-solid fa-pen-to-square fa-xs"></i></button>
-                                    <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteSubCategory(${s.id});" title="Delete Sub-Category"><i class="fa-solid fa-trash fa-xs"></i></button>
+                                    <button class="btn btn-sm btn-outline-warning py-0 px-2 me-1" onclick="openAdminEdit('subcategory', '${idx}', '${s.replace(/'/g, "\\'")}', '', '${currentCatKey}')" title="Edit Sub-Category"><i class="fa-solid fa-pen-to-square fa-xs"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="deleteSubCategory('${currentCatKey}', '${s.replace(/'/g, "\\'")}')" title="Delete Sub-Category"><i class="fa-solid fa-trash fa-xs"></i></button>
                                 </div>
                             </div>
                         `).join("")}
@@ -1409,47 +1809,67 @@ async function renderAdminCategories(container) {
     </div>`;
 }
 
-window.selectAdminCategory = function(id) {
-    adminSelectedCategoryId = id;
+window.selectAdminCategory = function(name) {
+    adminSelectedCategoryId = name;
     switchAdminTab("categories");
 };
 
 window.addCategory = async function(e) {
     e.preventDefault();
     const name = document.getElementById("newCatName").value.trim();
-    if (!name) return;
-    await authFetch("/api/admin/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
-    await loadCategories();
-    switchAdminTab("categories");
-};
-window.deleteCategory = async function(id) {
-    if (!confirm("Delete category?")) return;
-    await authFetch(`/api/admin/categories/${id}`, { method: "DELETE" });
-    if (adminSelectedCategoryId === id) adminSelectedCategoryId = null;
-    await loadCategories();
+    if (!name || categoriesData[name]) return;
+    categoriesData[name] = [];
+    await saveCategoriesToFirestore();
+    renderCategories();
     switchAdminTab("categories");
 };
 
-window.addSubCategory = async function(e, categoryId) {
+window.deleteCategory = async function(name) {
+    if (!confirm(`Delete category "${name}" and all its subcategories?`)) return;
+    delete categoriesData[name];
+    if (adminSelectedCategoryId === name) adminSelectedCategoryId = null;
+    await saveCategoriesToFirestore();
+    renderCategories();
+    switchAdminTab("categories");
+};
+
+window.addSubCategory = async function(e, catName) {
     e.preventDefault();
     const name = document.getElementById("newSubCatName").value.trim();
-    if (!categoryId || !name) return;
-    await authFetch("/api/admin/subcategories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ categoryId, name }) });
-    await loadCategories();
-    switchAdminTab("categories");
-};
-window.deleteSubCategory = async function(id) {
-    if (!confirm("Delete sub-category?")) return;
-    await authFetch(`/api/admin/subcategories/${id}`, { method: "DELETE" });
-    await loadCategories();
-    switchAdminTab("categories");
+    if (!name || !categoriesData[catName]) return;
+    if (!categoriesData[catName].includes(name)) {
+        categoriesData[catName].push(name);
+        await saveCategoriesToFirestore();
+        renderCategories();
+        switchAdminTab("categories");
+    }
 };
 
-// Admin Users Tab
+window.deleteSubCategory = async function(catName, subName) {
+    if (!confirm(`Delete subcategory "${subName}"?`)) return;
+    if (categoriesData[catName]) {
+        categoriesData[catName] = categoriesData[catName].filter(s => s !== subName);
+        await saveCategoriesToFirestore();
+        renderCategories();
+        switchAdminTab("categories");
+    }
+};
+
+// Admin Users Tab (Loaded from Firestore 'users' collection)
 async function renderAdminUsers(container) {
-    const res = await authFetch("/api/admin/users");
-    const data = await res.json();
-    const users = data.users || [];
+    let users = [];
+    try {
+        const snap = await db.collection("users").get();
+        snap.forEach(doc => users.push({ id: doc.id, ...doc.data() }));
+    } catch (e) {
+        console.warn("Error fetching users:", e);
+    }
+
+    if (users.length === 0) {
+        await seedDefaultUsersIfNeeded();
+        const snap = await db.collection("users").get();
+        snap.forEach(doc => users.push({ id: doc.id, ...doc.data() }));
+    }
 
     container.innerHTML = `
     <div class="row g-4">
@@ -1458,26 +1878,22 @@ async function renderAdminUsers(container) {
                 <h6 class="text-primary fw-bold mb-3"><i class="fa-solid fa-user-plus me-2"></i>Add New User</h6>
                 <form onsubmit="addUser(event)">
                     <div class="mb-2">
-                        <label class="form-label small">Username</label>
-                        <input type="text" id="newUsername" class="form-control" placeholder="Username" required>
+                        <label class="form-label small">Username / Email</label>
+                        <input type="text" id="newUsername" class="form-control" placeholder="user@smvs.org" required>
                     </div>
                     <div class="mb-2">
-                        <label class="form-label small">Email</label>
-                        <input type="email" id="newUserEmail" class="form-control" placeholder="Email" required>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label small">Full Name</label>
-                        <input type="text" id="newUserFullName" class="form-control" placeholder="Full Name">
+                        <label class="form-label small">Display Name</label>
+                        <input type="text" id="newUserDisplayName" class="form-control" placeholder="PSK" required>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small">Password</label>
-                        <input type="password" id="newUserPass" class="form-control" placeholder="Password" required>
+                        <input type="text" id="newUserPass" class="form-control" placeholder="Password" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label small">Role</label>
                         <select id="newUserRole" class="form-select">
-                            <option value="user">User (Standard)</option>
-                            <option value="admin">Administrator</option>
+                            <option value="admin">Admin (Full Access)</option>
+                            <option value="user">User (Standard Access)</option>
                         </select>
                     </div>
                     <button type="submit" class="btn btn-primary w-100 fw-bold"><i class="fa-solid fa-user-check me-1"></i> Create User</button>
@@ -1487,14 +1903,17 @@ async function renderAdminUsers(container) {
 
         <div class="col-12 col-lg-8">
             <div class="card p-3">
-                <h6 class="text-primary fw-bold mb-3"><i class="fa-solid fa-users me-2"></i>Existing Users (${users.length})</h6>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="text-primary fw-bold mb-0"><i class="fa-solid fa-users me-2"></i>Existing Users (${users.length})</h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="switchAdminTab('users')"><i class="fa-solid fa-rotate me-1"></i> Refresh</button>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-dark table-hover mb-0 align-middle">
                         <thead>
                             <tr class="text-muted small">
-                                <th>ID</th>
-                                <th>User</th>
-                                <th>Email</th>
+                                <th>Display Name</th>
+                                <th>Username / Email</th>
+                                <th>Password</th>
                                 <th>Role</th>
                                 <th>Status</th>
                                 <th class="text-end">Actions</th>
@@ -1503,14 +1922,14 @@ async function renderAdminUsers(container) {
                         <tbody>
                             ${users.map(u => `
                                 <tr>
-                                    <td><code>#${u.id}</code></td>
-                                    <td class="fw-bold">${u.fullName || u.username}</td>
-                                    <td><small class="text-muted">${u.email}</small></td>
-                                    <td><span class="${u.role === 'admin' ? 'badge bg-warning text-dark' : 'badge bg-secondary'}">${u.role}</span></td>
-                                    <td><span class="badge ${u.isActive ? 'bg-success' : 'bg-danger'}">${u.isActive ? 'Active' : 'Inactive'}</span></td>
+                                    <td class="fw-bold">${u.displayName || u.fullName || u.username}</td>
+                                    <td><small class="text-muted">${u.username || u.email}</small></td>
+                                    <td><code class="text-warning">${u.password || "••••"}</code></td>
+                                    <td><span class="${u.role === 'admin' ? 'badge bg-warning text-dark' : 'badge bg-secondary'}">${(u.role || 'user').toUpperCase()}</span></td>
+                                    <td><span class="badge ${u.isActive !== false ? 'bg-success' : 'bg-danger'}">${u.isActive !== false ? 'Active' : 'Inactive'}</span></td>
                                     <td class="text-end text-nowrap">
-                                        <button class="btn btn-sm btn-outline-warning me-1" onclick="openAdminEdit('user', ${u.id}, '${u.username}', '', null, '${(u.fullName||'').replace(/'/g, "\\'")}', '${u.email}', '${u.role}', ${u.isActive ? 1 : 0});" title="Edit User"><i class="fa-solid fa-pen-to-square"></i></button>
-                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteUser(${u.id})" ${u.id === currentUser.id ? 'disabled' : ''} title="Delete User"><i class="fa-solid fa-trash"></i></button>
+                                        <button class="btn btn-sm btn-outline-warning me-1" onclick="openAdminEdit('user', '${u.id}', '${u.username}', '', null, '${(u.displayName||u.fullName||'').replace(/'/g, "\\'")}', '${u.email||u.username}', '${u.role}', ${u.isActive !== false ? 1 : 0}, '${(u.password||'').replace(/'/g, "\\'")}');" title="Edit User"><i class="fa-solid fa-pen-to-square"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.id}')" ${u.username === currentUser?.username ? 'disabled' : ''} title="Delete User"><i class="fa-solid fa-trash"></i></button>
                                     </td>
                                 </tr>
                             `).join("")}
@@ -1522,13 +1941,49 @@ async function renderAdminUsers(container) {
     </div>`;
 }
 
-// Universal Admin Edit Modal Handler
-let adminEditModalInstance = null;
+window.addUser = async function(e) {
+    e.preventDefault();
+    const username = document.getElementById("newUsername").value.trim();
+    const displayName = document.getElementById("newUserDisplayName").value.trim();
+    const password = document.getElementById("newUserPass").value.trim();
+    const role = document.getElementById("newUserRole").value;
 
-window.openAdminEdit = function(type, id, name, code = "", parentId = null, fullName = "", email = "", role = "user", isActive = 1) {
+    showLoader("CREATING USER...");
+    try {
+        await db.collection("users").add({
+            username,
+            email: username,
+            displayName,
+            fullName: displayName,
+            password,
+            role,
+            isActive: true,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        alert("User added successfully in Firestore!");
+        switchAdminTab("users");
+    } catch (err) {
+        alert("Error: " + err.message);
+    } finally {
+        hideLoader();
+    }
+};
+
+window.deleteUser = async function(id) {
+    if (!confirm("Delete user record from Firestore?")) return;
+    try {
+        await db.collection("users").doc(id).delete();
+        switchAdminTab("users");
+    } catch (e) {
+        alert("Error: " + e.message);
+    }
+};
+
+// --- 15. UNIVERSAL ADMIN EDIT MODAL ---
+window.openAdminEdit = function(type, id, name, code = "", parentId = null, fullName = "", email = "", role = "user", isActive = 1, password = "") {
     document.getElementById("adminEditType").value = type;
     document.getElementById("adminEditId").value = id;
-    
+
     const titleEl = document.getElementById("adminEditModalTitle");
     const nameGroup = document.getElementById("adminEditNameGroup");
     const nameLabel = document.getElementById("adminEditNameLabel");
@@ -1538,7 +1993,7 @@ window.openAdminEdit = function(type, id, name, code = "", parentId = null, full
     const parentSelect = document.getElementById("adminEditParentSelect");
     const userFields = document.getElementById("adminEditUserFields");
 
-    // Reset fields
+    // Reset visibility
     parentGroup.classList.add("d-none");
     userFields.classList.add("d-none");
     nameGroup.classList.remove("d-none");
@@ -1552,15 +2007,14 @@ window.openAdminEdit = function(type, id, name, code = "", parentId = null, full
         nameLabel.textContent = "Zone Name";
         parentGroup.classList.remove("d-none");
         parentLabel.textContent = "Parent Country";
-        parentSelect.innerHTML = (locationTree || []).map(c => `<option value="${c.id}" ${c.id === parentId ? 'selected' : ''}>${c.name}</option>`).join("");
+        parentSelect.innerHTML = locationTree.map(c => `<option value="${c.id}" ${c.id === parentId ? 'selected' : ''}>${c.name}</option>`).join("");
     } else if (type === "center") {
         titleEl.innerHTML = '<i class="fa-solid fa-location-dot me-2 text-warning"></i>Edit Center';
         nameLabel.textContent = "Center Name";
         parentGroup.classList.remove("d-none");
         parentLabel.textContent = "Parent Zone";
-        
         let zoneOptions = "";
-        (locationTree || []).forEach(c => {
+        locationTree.forEach(c => {
             (c.zones || []).forEach(z => {
                 zoneOptions += `<option value="${z.id}" ${z.id === parentId ? 'selected' : ''}>${z.name} (${c.name})</option>`;
             });
@@ -1572,6 +2026,7 @@ window.openAdminEdit = function(type, id, name, code = "", parentId = null, full
     } else if (type === "subcategory") {
         titleEl.innerHTML = '<i class="fa-solid fa-list-check me-2 text-warning"></i>Edit Sub-Category';
         nameLabel.textContent = "Sub-Category Name";
+        document.getElementById("adminEditParentId").value = parentId;
     } else if (type === "user") {
         titleEl.innerHTML = '<i class="fa-solid fa-user-pen me-2 text-warning"></i>Edit User';
         nameGroup.classList.add("d-none");
@@ -1579,7 +2034,7 @@ window.openAdminEdit = function(type, id, name, code = "", parentId = null, full
         document.getElementById("adminEditUserFullName").value = fullName;
         document.getElementById("adminEditUserEmail").value = email;
         document.getElementById("adminEditUserRole").value = role;
-        document.getElementById("adminEditUserPassword").value = "";
+        document.getElementById("adminEditUserPassword").value = password || "";
         document.getElementById("adminEditUserActive").checked = Boolean(isActive);
     }
 
@@ -1598,55 +2053,82 @@ window.submitAdminEdit = async function(e) {
 
     showLoader("SAVING CHANGES...");
     try {
-        let url = "";
-        let body = {};
-
         if (type === "country") {
-            url = `/api/admin/countries/${id}`;
-            body = { name };
-        } else if (type === "zone") {
-            url = `/api/admin/zones/${id}`;
-            body = { name, countryId: parentId };
-        } else if (type === "center") {
-            url = `/api/admin/centers/${id}`;
-            body = { name, zoneId: parentId };
-        } else if (type === "category") {
-            url = `/api/admin/categories/${id}`;
-            body = { name };
-        } else if (type === "subcategory") {
-            url = `/api/admin/subcategories/${id}`;
-            body = { name };
-        } else if (type === "user") {
-            url = `/api/admin/users/${id}`;
-            body = {
-                fullName: document.getElementById("adminEditUserFullName").value.trim(),
-                email: document.getElementById("adminEditUserEmail").value.trim(),
-                username: document.getElementById("adminEditNameInput").value.trim() || document.getElementById("adminEditUserEmail").value.split('@')[0],
-                role: document.getElementById("adminEditUserRole").value,
-                password: document.getElementById("adminEditUserPassword").value,
-                isActive: document.getElementById("adminEditUserActive").checked
-            };
-        }
-
-        const res = await authFetch(url, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error || "Update failed");
-
-        if (adminEditModalInstance) adminEditModalInstance.hide();
-
-        if (type === "country" || type === "zone" || type === "center") {
-            await loadLocationsTree();
+            const country = locationTree.find(c => String(c.id) === String(id));
+            if (country) country.name = name;
+            await saveLocationsTreeToFirestore();
+            populateCountryDropdown();
             switchAdminTab("locations");
-        } else if (type === "category" || type === "subcategory") {
-            await loadCategories();
-            switchAdminTab("categories");
+        } else if (type === "zone") {
+            locationTree.forEach(c => {
+                (c.zones || []).forEach(z => {
+                    if (String(z.id) === String(id)) z.name = name;
+                });
+            });
+            await saveLocationsTreeToFirestore();
+            populateCountryDropdown();
+            switchAdminTab("locations");
+        } else if (type === "center") {
+            locationTree.forEach(c => {
+                (c.zones || []).forEach(z => {
+                    (z.centers || []).forEach(cnt => {
+                        if (String(cnt.id) === String(id)) cnt.name = name;
+                    });
+                });
+            });
+            await saveLocationsTreeToFirestore();
+            populateCountryDropdown();
+            switchAdminTab("locations");
+        } else if (type === "category") {
+            if (id !== name && categoriesData[id]) {
+                categoriesData[name] = categoriesData[id];
+                delete categoriesData[id];
+                adminSelectedCategoryId = name;
+                await saveCategoriesToFirestore();
+                renderCategories();
+                switchAdminTab("categories");
+            }
+        } else if (type === "subcategory") {
+            const catName = document.getElementById("adminEditParentId")?.value || adminSelectedCategoryId;
+            const idx = parseInt(id);
+            if (categoriesData[catName] && !isNaN(idx) && categoriesData[catName][idx]) {
+                categoriesData[catName][idx] = name;
+                await saveCategoriesToFirestore();
+                renderCategories();
+                switchAdminTab("categories");
+            }
         } else if (type === "user") {
+            const displayName = document.getElementById("adminEditUserFullName").value.trim();
+            const username = document.getElementById("adminEditUserEmail").value.trim();
+            const role = document.getElementById("adminEditUserRole").value;
+            const password = document.getElementById("adminEditUserPassword").value.trim();
+            const isActive = document.getElementById("adminEditUserActive").checked;
+
+            const updatePayload = {
+                displayName,
+                fullName: displayName,
+                username,
+                email: username,
+                role,
+                isActive,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            if (password) updatePayload.password = password;
+
+            await db.collection("users").doc(id).set(updatePayload, { merge: true });
+
+            // If updating current active user, update state
+            if (currentUser && currentUser.id === id) {
+                currentUser.displayName = displayName;
+                currentUser.username = username;
+                currentUser.role = role;
+                localStorage.setItem("smvs_active_user", JSON.stringify(currentUser));
+            }
+
             switchAdminTab("users");
         }
+
+        if (adminEditModalInstance) adminEditModalInstance.hide();
     } catch (err) {
         alert("Error: " + err.message);
     } finally {
@@ -1654,113 +2136,46 @@ window.submitAdminEdit = async function(e) {
     }
 };
 
-window.addUser = async function(e) {
-    e.preventDefault();
-    const username = document.getElementById("newUsername").value.trim();
-    const email = document.getElementById("newUserEmail").value.trim();
-    const fullName = document.getElementById("newUserFullName").value.trim();
-    const password = document.getElementById("newUserPass").value;
-    const role = document.getElementById("newUserRole").value;
+// --- 16. INITIALIZATION ON DOM READY ---
+document.addEventListener("DOMContentLoaded", () => {
+    initEmailJsIfConfigured();
 
-    await authFetch("/api/admin/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, email, fullName, password, role })
-    });
-    switchAdminTab("users");
+    // Check existing active user session
+    checkSavedSession();
+
+    // Pre-seed user accounts in background
+    seedDefaultUsersIfNeeded().catch(console.warn);
+
+    // Initialize Quill Editor
+    const editorEl = document.getElementById("editor-container");
+    if (editorEl && typeof Quill !== "undefined") {
+        quill = new Quill("#editor-container", {
+            theme: "snow",
+            modules: {
+                toolbar: [
+                    [{ header: [1, 2, 3, false] }],
+                    ["bold", "italic", "underline", "strike"],
+                    [{ list: "ordered" }, { list: "bullet" }],
+                    [{ align: [] }],
+                    ["clean"]
+                ]
+            }
+        });
+        quill.on("text-change", scheduleDraftSave);
+    }
+
+    // Auto-save draft on form input changes
+    const reportForm = document.getElementById("reportForm");
+    if (reportForm) {
+        reportForm.addEventListener("input", scheduleDraftSave);
+        reportForm.addEventListener("change", scheduleDraftSave);
+    }
+});
+
+window.closeSidebarDrawer = function() {
+    const el = document.getElementById("smvsSidebarDrawer");
+    if (el && typeof bootstrap !== "undefined") {
+        const offcanvas = bootstrap.Offcanvas.getInstance(el);
+        if (offcanvas) offcanvas.hide();
+    }
 };
-window.deleteUser = async function(id) {
-    if (!confirm("Delete user?")) return;
-    await authFetch(`/api/admin/users/${id}`, { method: "DELETE" });
-    switchAdminTab("users");
-};
-
-// Admin Trash & Restore Tab
-async function renderAdminTrash(container) {
-    const res = await authFetch("/api/admin/trash");
-    const data = await res.json();
-    const trash = data.trash || [];
-
-    container.innerHTML = `
-    <div class="card p-3">
-        <h6 class="text-primary fw-bold mb-3"><i class="fa-solid fa-trash-can me-1"></i> Deleted Reports in Trash (${trash.length})</h6>
-        ${trash.length === 0 ? '<p class="text-muted text-center py-4">Trash is empty. No deleted reports found.</p>' : `
-            <div class="table-responsive">
-                <table class="table table-dark table-hover mb-0">
-                    <thead>
-                        <tr class="text-muted small">
-                            <th>Date</th>
-                            <th>Location & Occasion</th>
-                            <th>Zone/Center</th>
-                            <th>Deleted By</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${trash.map(r => `
-                            <tr>
-                                <td>${r.date}</td>
-                                <td><b>${r.location}</b><br/><small class="text-muted">${r.occasion}</small></td>
-                                <td>${r.zone} ${r.center ? '/ ' + r.center : ''}</td>
-                                <td><small class="text-muted">${r.deletedByName || '-'}</small></td>
-                                <td class="text-end">
-                                    <button class="btn btn-sm btn-success me-1" onclick="restoreTrashReport(${r.id})"><i class="fa-solid fa-rotate-left me-1"></i>Restore</button>
-                                    <button class="btn btn-sm btn-danger" onclick="purgeTrashReport(${r.id})"><i class="fa-solid fa-xmark me-1"></i>Purge</button>
-                                </td>
-                            </tr>
-                        `).join("")}
-                    </tbody>
-                </table>
-            </div>
-        `}
-    </div>`;
-}
-
-window.restoreTrashReport = async function(id) {
-    await authFetch(`/api/admin/trash/restore/${id}`, { method: "POST" });
-    await fetchReports();
-    switchAdminTab("trash");
-};
-window.purgeTrashReport = async function(id) {
-    if (!confirm("Permanently purge this report?")) return;
-    await authFetch(`/api/admin/trash/purge/${id}`, { method: "DELETE" });
-    switchAdminTab("trash");
-};
-
-// Admin Audit Logs Tab
-async function renderAdminAudit(container) {
-    const res = await authFetch("/api/admin/audit-logs");
-    const data = await res.json();
-    const logs = data.logs || [];
-
-    container.innerHTML = `
-    <div class="card p-3">
-        <h6 class="text-primary fw-bold mb-3"><i class="fa-solid fa-list-check me-1"></i> Activity Audit Logs (Last 150)</h6>
-        <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
-            <table class="table table-dark table-hover small mb-0">
-                <thead>
-                    <tr class="text-muted">
-                        <th>Timestamp</th>
-                        <th>User</th>
-                        <th>Action</th>
-                        <th>Entity</th>
-                        <th>Details</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${logs.map(l => `
-                        <tr>
-                            <td><small class="text-muted">${new Date(l.created_at).toLocaleString()}</small></td>
-                            <td><b>@${l.username}</b></td>
-                            <td><span class="badge ${l.action.includes('DELETE') ? 'bg-danger' : l.action.includes('CREATE') ? 'bg-success' : 'bg-primary'}">${l.action}</span></td>
-                            <td><code>${l.entity_type}</code></td>
-                            <td><small class="text-muted font-monospace">${JSON.stringify(l.details)}</small></td>
-                        </tr>
-                    `).join("")}
-                </tbody>
-            </table>
-        </div>
-    </div>`;
-}
-
-

@@ -3,27 +3,23 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Public email links: anyone with report ID can read that one document only.
     match /reports/{reportId} {
-      allow get: if true;
-      allow list, create, update, delete: if request.auth != null;
+      allow read, write: if true;
     }
 
     match /locations_master/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read, write: if true;
     }
 
     match /zonal_centers/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read, write: if true;
     }
 
     match /categories_master/{docId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read, write: if true;
     }
 
     match /users/{userId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if true;
     }
 
     match /_automation_mail_log/{docId} {

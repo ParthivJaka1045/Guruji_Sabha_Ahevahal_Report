@@ -1,13 +1,16 @@
 node_modules/
-*.zip
-.next/
 dist/
 out/
-.vscode/
+.firebase/
 *.log
-reports.sqlite
-smvs_secure.sqlite
+*.zip
+*.sqlite
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
 functions/node_modules/
 functions/.env*
 functions/.runtimeconfig.json
+
 

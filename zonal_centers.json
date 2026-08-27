@@ -1,0 +1,129 @@
+[
+  {
+    "zone": "Ahmedabad East",
+    "centers": [
+      "Ghanshyamnagar",
+      "Isanpur",
+      "Naroda",
+      "Nikol",
+      "Vastral"
+    ]
+  },
+  {
+    "zone": "Ahmedabad West",
+    "centers": [
+      "Bavla",
+      "Ghatlodiya",
+      "Gota",
+      "Sanand",
+      "Satellite",
+      "Vasna"
+    ]
+  },
+  {
+    "zone": "Anand",
+    "centers": [
+      "Anand"
+    ]
+  },
+  {
+    "zone": "Bhavnagar",
+    "centers": [
+      "Bhavnagar",
+      "Una"
+    ]
+  },
+  {
+    "zone": "Gandhinagar",
+    "centers": [
+      "Chandkheda",
+      "Gandhinagar",
+      "Kalol",
+      "Swaminarayan Dham",
+      "Vijapur"
+    ]
+  },
+  {
+    "zone": "Godhar",
+    "centers": [
+      "Godhar",
+      "Santrampur",
+      "Virpur"
+    ]
+  },
+  {
+    "zone": "Godhara",
+    "centers": [
+      "Chhodaudepur",
+      "Dahod",
+      "Godhra",
+      "Zalod"
+    ]
+  },
+  {
+    "zone": "Himmatnagar",
+    "centers": [
+      "Bayad",
+      "Himmatnagar",
+      "Malpur",
+      "Modasa"
+    ]
+  },
+  {
+    "zone": "Maharastra",
+    "centers": [
+      "Kandivali",
+      "Navi Mumbai",
+      "Pune"
+    ]
+  },
+  {
+    "zone": "Mahesana",
+    "centers": [
+      "Kadi",
+      "Mehsana",
+      "Palanpur",
+      "Patan",
+      "Unjha",
+      "Visnagar"
+    ]
+  },
+  {
+    "zone": "Morbi",
+    "centers": [
+      "Bhuj",
+      "Morbi"
+    ]
+  },
+  {
+    "zone": "Rajkot",
+    "centers": [
+      "Junagadh",
+      "Rajkot"
+    ]
+  },
+  {
+    "zone": "Surat",
+    "centers": [
+      "Ankleshwar",
+      "Bharuch",
+      "Dabholi",
+      "Varachha"
+    ]
+  },
+  {
+    "zone": "Surendranagar",
+    "centers": [
+      "Surendranagar",
+      "Viramgam"
+    ]
+  },
+  {
+    "zone": "Vadodara",
+    "centers": [
+      "Halol",
+      "Vadodara",
+      "Waghodiya"
+    ]
+  }
+]

@@ -116,8 +116,162 @@
         </div>
     </div>
 
+        <!-- ===== MAINTENANCE VIEW (૨૪ કલાક મેન્ટેનન્સ પેજ) ===== -->
+    <div id="maintenanceView" class="min-vh-100 d-flex flex-column justify-content-center align-items-center py-5 px-3">
+        <div class="maintenance-container text-center animate-fade-in">
+            <div class="card maintenance-card p-4 p-md-5">
+                
+                <!-- Logo with glowing aura -->
+                <div class="maintenance-logo-wrap mb-3">
+                    <img src="/assets/smvs-logo.png" alt="SMVS Logo" class="maintenance-logo-glow" style="height: 76px; width: auto; object-fit: contain;">
+                </div>
+
+                <!-- Animated Maintenance Badge -->
+                <div class="mb-3">
+                    <span class="badge px-3 py-2 rounded-pill fw-semibold" style="background: rgba(229, 142, 0, 0.16); color: #ffb433; border: 1px solid rgba(229, 142, 0, 0.45); font-size: 0.85rem; letter-spacing: 0.5px;">
+                        <i class="fa-solid fa-screwdriver-wrench fa-bounce me-2 text-warning"></i>સિસ્ટમ મેન્ટેનન્સ ચાલુ છે | SCHEDULED MAINTENANCE
+                    </span>
+                </div>
+
+                <!-- Heading in Gujarati & English -->
+                <h3 class="fw-bold text-white mb-2" style="letter-spacing: -0.3px;">
+                    વેબસાઇટ હાલમાં સુધારણા હેઠળ છે
+                </h3>
+                <h6 class="text-primary fw-semibold mb-3">
+                    SMVS Guruji Sabha Report Portal — Under Maintenance
+                </h6>
+
+                <!-- Respectful Description in Gujarati -->
+                <p class="text-muted small mb-4 mx-auto" style="max-width: 540px; line-height: 1.7; font-size: 0.92rem;">
+                    જય સ્વામિનારાયણ! 🙏 સર્વર અપગ્રેડેશન, ડેટાબેઝ સુરક્ષા અને સ્પીડ સુધારણા હેતુ વેબસાઇટ હાલમાં અસ્થાયી રૂપે બંધ રાખવામાં આવી છે. ૨૪ કલાકની અંદર સિસ્ટમ ફરીથી રાબેતા મુજબ કાર્યરત થઈ જશે. આપને પડેલી અસુવિધા બદલ દિલગીર છીએ.
+                </p>
+
+                <!-- 24-HOUR COUNTDOWN TIMER BOX -->
+                <div class="maintenance-timer-container p-3 p-md-4 rounded-4 mb-4 text-start" style="background: rgba(11, 18, 32, 0.85); border: 1px solid rgba(229, 142, 0, 0.25);">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <span class="small fw-bold text-warning text-uppercase" style="letter-spacing: 1px; font-size: 11px;">
+                            <i class="fa-solid fa-stopwatch me-1"></i> અંદાજિત સમય બાકી (Estimated Time Remaining)
+                        </span>
+                        <span class="badge px-2 py-1 fw-bold rounded-pill" style="background: rgba(229, 142, 0, 0.2); color: #ffb433; border: 1px solid rgba(229, 142, 0, 0.4); font-size: 11px;">
+                            <i class="fa-solid fa-clock me-1"></i> 24 HOURS TIMER
+                        </span>
+                    </div>
+
+                    <!-- 3 Time Columns: Hours, Minutes, Seconds -->
+                    <div class="row g-2 g-sm-3 justify-content-center text-center">
+                        <div class="col-4">
+                            <div class="timer-unit-box">
+                                <div id="mHours" class="timer-number">24</div>
+                                <div class="timer-label">HOURS (કલાક)</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="timer-unit-box">
+                                <div id="mMinutes" class="timer-number">00</div>
+                                <div class="timer-label">MINUTES (મિનિટ)</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="timer-unit-box">
+                                <div id="mSeconds" class="timer-number">00</div>
+                                <div class="timer-label">SECONDS (સેકન્ડ)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress Bar -->
+                    <div class="mt-3">
+                        <div class="progress" style="height: 7px; background: rgba(255,255,255,0.06); border-radius: 10px; overflow: hidden;">
+                            <div id="maintenanceProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 10%; background: linear-gradient(90deg, #e58e00, #ffb433);"></div>
+                        </div>
+                        <div class="d-flex justify-content-between mt-2 text-muted" style="font-size: 11px;">
+                            <span><i class="fa-solid fa-play me-1 text-success"></i>જાળવણી શરૂ</span>
+                            <span id="maintenancePercentText" class="text-warning fw-semibold">પ્રક્રિયા ચાલુ છે...</span>
+                            <span><i class="fa-solid fa-flag-checkered me-1 text-primary"></i>૨૪ કલાક પૂર્ણ લક્ષ્ય</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Three System Status Chips -->
+                <div class="row g-2 mb-4 text-start">
+                    <div class="col-12 col-md-4">
+                        <div class="maintenance-task-card h-100 d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-circle-check text-success fs-5"></i>
+                            <div>
+                                <div class="text-light fw-bold" style="font-size: 12px;">સર્વર અપગ્રેડ</div>
+                                <div class="text-muted" style="font-size: 10px;">Cloud Engine Active</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="maintenance-task-card h-100 d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-gears fa-spin text-warning fs-5"></i>
+                            <div>
+                                <div class="text-light fw-bold" style="font-size: 12px;">ડેટાબેઝ ઓપ્ટિમાઇઝ</div>
+                                <div class="text-warning" style="font-size: 10px;">In Progress (ચાલુ છે)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="maintenance-task-card h-100 d-flex align-items-center gap-2">
+                            <i class="fa-solid fa-shield-halved text-info fs-5"></i>
+                            <div>
+                                <div class="text-light fw-bold" style="font-size: 12px;">સુરક્ષા અને બેકઅપ</div>
+                                <div class="text-muted" style="font-size: 10px;">Security Verification</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Button -->
+                <div class="d-flex justify-content-center gap-2 flex-wrap mb-2">
+                    <button type="button" class="btn btn-outline-warning px-4 py-2 rounded-pill fw-semibold" onclick="window.location.reload()">
+                        <i class="fa-solid fa-arrows-rotate me-2"></i>પેજ રીફ્રેશ કરો (Check Status)
+                    </button>
+                </div>
+
+                <!-- Discreet Admin Bypass Link -->
+                <div class="mt-4 pt-3 border-top border-secondary text-center" style="border-color: rgba(255,255,255,0.08) !important;">
+                    <a href="javascript:void(0)" onclick="openAdminBypassModal()" class="text-muted small text-decoration-none" style="font-size: 11.5px; opacity: 0.65; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.65'">
+                        <i class="fa-solid fa-lock me-1"></i> સંચાલક પ્રવેશ (Admin Portal Access)
+                    </a>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== ADMIN BYPASS MODAL ===== -->
+    <div class="modal fade" id="adminBypassModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: var(--bg-card-solid); border: 1px solid var(--primary); border-radius: var(--radius);">
+                <div class="modal-header border-bottom border-secondary" style="border-color: var(--border) !important;">
+                    <h6 class="modal-title fw-bold text-primary mb-0">
+                        <i class="fa-solid fa-shield-halved me-2"></i>સંચાલક અધિકૃત પ્રવેશ (Admin Access)
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 text-center">
+                    <i class="fa-solid fa-user-shield text-warning mb-3" style="font-size: 3rem;"></i>
+                    <h6 class="fw-bold text-white mb-2">મેન્ટેનન્સ બાયપાસ એક્સેસ</h6>
+                    <p class="text-muted small mb-4">
+                        જો આપ SMVS રિપોર્ટ પોર્ટલના અધિકૃત સંચાલક (Admin) છો, તો આપ મેન્ટેનન્સ સ્ક્રીન બાયપાસ કરીને સામાન્ય લૉગિન પેજ પર જઈ શકો છો.
+                    </p>
+                    <div class="d-grid gap-2">
+                        <button type="button" class="btn btn-primary py-2 fw-bold" onclick="proceedToAdminLogin()">
+                            <i class="fa-solid fa-right-to-bracket me-2"></i>લૉગિન સ્ક્રીન પર જાઓ (Proceed to Login)
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary py-2" data-bs-dismiss="modal">
+                            રદ કરો (Cancel)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== LOGIN VIEW ===== -->
-    <div id="loginView" class="d-flex align-items-center justify-content-center min-vh-100 py-4">
+    <div id="loginView" class="d-flex align-items-center justify-content-center min-vh-100 py-4 d-none">
         <div class="card p-4 p-sm-5 mx-3 w-100" style="max-width: 420px;">
             <div class="text-center mb-4">
                 <img src="/assets/smvs-logo.png" alt="SMVS Logo" class="mx-auto mb-2 d-block" style="height: 64px; width: auto; object-fit: contain; filter: drop-shadow(0 0 12px rgba(229, 142, 0, 0.45));">
@@ -144,6 +298,12 @@
                 </button>
             </form>
             <div id="loginError" class="text-danger small text-center mt-3 d-none"></div>
+            <div class="text-center mt-3 pt-2 border-top border-secondary" style="border-color: rgba(255,255,255,0.08) !important;">
+                <a href="javascript:void(0)" onclick="returnToMaintenancePage()" class="text-muted small text-decoration-none">
+                    <i class="fa-solid fa-arrow-left me-1"></i>મેન્ટેનન્સ પેજ પર પાછા જાઓ
+                </a>
+            </div>
+
             <div class="mt-4 p-2 rounded text-center small text-muted border border-secondary" style="border-color: var(--border) !important; font-size: 11px;">
                 👑 Admin: <code>admin@smvs.org</code> / <code>Admin@2026</code><br/>
                 👤 User: <code>user@smvs.org</code> / <code>User@2026</code>
@@ -174,6 +334,17 @@
         </nav>
 
         <div class="container py-4">
+
+                        <!-- Maintenance Mode Active Notice for Admin -->
+            <div id="maintenanceAdminNotice" class="alert d-none mb-4 py-2 px-3 border-0 d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: rgba(229, 142, 0, 0.14); border: 1px solid rgba(229, 142, 0, 0.4) !important; border-radius: 12px;">
+                <div class="d-flex align-items-center gap-2 text-warning small">
+                    <i class="fa-solid fa-triangle-exclamation fs-6"></i>
+                    <span><strong>મેન્ટેનન્સ મોડ ચાલુ છે:</strong> સામાન્ય યુઝર્સ માટે હોમ પેજ પર ૨૪ કલાકનું મેન્ટેનન્સ પેજ દેખાઈ રહ્યું છે.</span>
+                </div>
+                <button type="button" class="btn btn-outline-warning btn-sm py-1 px-3 fw-semibold rounded-pill" onclick="returnToMaintenancePage()">
+                    <i class="fa-solid fa-eye me-1"></i> મેન્ટેનન્સ પેજ જુઓ
+                </button>
+            </div>
 
             <!-- ===== DASHBOARD VIEW (UNIFIED RESPONSIVE GRID) ===== -->
             <div id="dashboardView" class="animate-fade-in">

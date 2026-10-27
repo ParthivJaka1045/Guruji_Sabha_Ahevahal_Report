@@ -36,6 +36,133 @@ function initEmailJsIfConfigured() {
     } catch (_) {}
 }
 
+// --- 1.2 MAINTENANCE MODE CONFIGURATION (મેન્ટેનન્સ મોડ કંટ્રોલ) ---
+// Set to true to show the 24-hour maintenance page on the homepage.
+// Set to false to restore normal portal access for all users.
+const MAINTENANCE_MODE = true;
+const MAINTENANCE_DURATION_HOURS = 24;
+let maintenanceTimerInterval = null;
+
+function isMaintenanceBypassed() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("admin") === "1" || params.get("admin") === "true" || params.get("bypass") === "admin") {
+            sessionStorage.setItem("smvs_admin_bypass", "true");
+            return true;
+        }
+        return sessionStorage.getItem("smvs_admin_bypass") === "true";
+    } catch (_) {
+        return false;
+    }
+}
+
+function showMaintenanceView() {
+    const maintenanceEl = document.getElementById("maintenanceView");
+    const loginEl = document.getElementById("loginView");
+    const mainEl = document.getElementById("mainApp");
+
+    if (maintenanceEl) maintenanceEl.classList.remove("d-none");
+    if (loginEl) loginEl.classList.add("d-none");
+    if (mainEl) mainEl.classList.add("d-none");
+
+    startMaintenanceTimer();
+}
+
+function hideMaintenanceView() {
+    const maintenanceEl = document.getElementById("maintenanceView");
+    if (maintenanceEl) maintenanceEl.classList.add("d-none");
+    if (maintenanceTimerInterval) {
+        clearInterval(maintenanceTimerInterval);
+        maintenanceTimerInterval = null;
+    }
+}
+
+function startMaintenanceTimer() {
+    if (maintenanceTimerInterval) {
+        clearInterval(maintenanceTimerInterval);
+        maintenanceTimerInterval = null;
+    }
+
+    const storageKey = "smvs_maintenance_target_time";
+    const totalDurationMs = MAINTENANCE_DURATION_HOURS * 60 * 60 * 1000;
+    let targetTime = parseInt(localStorage.getItem(storageKey), 10);
+
+    // If no target time stored or expired long ago, start a fresh 24 hours
+    if (!targetTime || isNaN(targetTime) || targetTime <= Date.now()) {
+        targetTime = Date.now() + totalDurationMs;
+        localStorage.setItem(storageKey, targetTime.toString());
+    }
+
+    function updateTick() {
+        const now = Date.now();
+        const diff = targetTime - now;
+
+        const hoursEl = document.getElementById("mHours");
+        const minutesEl = document.getElementById("mMinutes");
+        const secondsEl = document.getElementById("mSeconds");
+        const progressBar = document.getElementById("maintenanceProgressBar");
+        const percentText = document.getElementById("maintenancePercentText");
+
+        if (diff <= 0) {
+            if (hoursEl) hoursEl.textContent = "00";
+            if (minutesEl) minutesEl.textContent = "00";
+            if (secondsEl) secondsEl.textContent = "00";
+            if (progressBar) progressBar.style.width = "100%";
+            if (percentText) percentText.textContent = "Finalizing upgrades (99%)...";
+            return;
+        }
+
+        const totalSec = Math.floor(diff / 1000);
+        const hours = Math.floor(totalSec / 3600);
+        const minutes = Math.floor((totalSec % 3600) / 60);
+        const seconds = totalSec % 60;
+
+        if (hoursEl) hoursEl.textContent = String(hours).padStart(2, "0");
+        if (minutesEl) minutesEl.textContent = String(minutes).padStart(2, "0");
+        if (secondsEl) secondsEl.textContent = String(seconds).padStart(2, "0");
+
+        const elapsed = totalDurationMs - diff;
+        const percent = Math.min(100, Math.max(5, Math.round((elapsed / totalDurationMs) * 100)));
+        if (progressBar) progressBar.style.width = percent + "%";
+        if (percentText) percentText.textContent = `${percent}% Completed`;
+    }
+
+    updateTick();
+    maintenanceTimerInterval = setInterval(updateTick, 1000);
+}
+
+window.resetMaintenanceTimer = function() {
+    const totalDurationMs = MAINTENANCE_DURATION_HOURS * 60 * 60 * 1000;
+    const targetTime = Date.now() + totalDurationMs;
+    localStorage.setItem("smvs_maintenance_target_time", targetTime.toString());
+    startMaintenanceTimer();
+    console.log("SMVS Maintenance timer reset to 24 hours!");
+};
+
+window.openAdminBypassModal = function() {
+    const modalEl = document.getElementById("adminBypassModal");
+    if (modalEl && typeof bootstrap !== "undefined") {
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+};
+
+window.proceedToAdminLogin = function() {
+    sessionStorage.setItem("smvs_admin_bypass", "true");
+    const modalEl = document.getElementById("adminBypassModal");
+    if (modalEl && typeof bootstrap !== "undefined") {
+        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if (modalInstance) modalInstance.hide();
+    }
+    hideMaintenanceView();
+    checkSavedSession();
+};
+
+window.returnToMaintenancePage = function() {
+    sessionStorage.removeItem("smvs_admin_bypass");
+    showMaintenanceView();
+};
+
 // --- 2. GLOBAL STATE & STATIC SEED DATA ---
 let quill;
 let currentReportId = null;
@@ -255,11 +382,21 @@ window.handleLogin = async function(e) {
 window.logoutUser = function() {
     if (!confirm("Are you sure you want to Logout?")) return;
     localStorage.removeItem("smvs_active_user");
+    sessionStorage.removeItem("smvs_admin_bypass");
     currentUser = null;
-    showLoginView();
+    if (MAINTENANCE_MODE) {
+        showMaintenanceView();
+    } else {
+        showLoginView();
+    }
 };
 
 function showLoginView() {
+    if (MAINTENANCE_MODE && !isMaintenanceBypassed()) {
+        showMaintenanceView();
+        return;
+    }
+    hideMaintenanceView();
     document.getElementById("mainApp").classList.add("d-none");
     document.getElementById("loginView").classList.remove("d-none");
 }
@@ -301,8 +438,18 @@ function updateDashboardUI() {
 }
 
 async function onLoginSuccess() {
+    hideMaintenanceView();
     document.getElementById("loginView").classList.add("d-none");
     document.getElementById("mainApp").classList.remove("d-none");
+
+    const adminNotice = document.getElementById("maintenanceAdminNotice");
+    if (adminNotice) {
+        if (MAINTENANCE_MODE) {
+            adminNotice.classList.remove("d-none");
+        } else {
+            adminNotice.classList.add("d-none");
+        }
+    }
 
     const badge = document.getElementById("userBadge");
     const drawerBadge = document.getElementById("drawerUserBadge");
@@ -350,6 +497,11 @@ async function onLoginSuccess() {
 
 // Auto-restore session from localStorage on startup
 function checkSavedSession() {
+    if (MAINTENANCE_MODE && !isMaintenanceBypassed()) {
+        showMaintenanceView();
+        return;
+    }
+
     try {
         const saved = localStorage.getItem("smvs_active_user");
         if (saved) {

@@ -889,3 +889,98 @@ a:hover { color: var(--primary-light); }
     font-weight: 700;
     box-shadow: 0 0 14px var(--primary-glow);
 }
+
+
+/* --- 24. MAINTENANCE MODE UI STYLES --- */
+.maintenance-container {
+    max-width: 680px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+.maintenance-card {
+    background: rgba(17, 27, 46, 0.94);
+    border: 1px solid rgba(229, 142, 0, 0.35);
+    border-radius: 24px;
+    box-shadow: 0 16px 50px rgba(0, 0, 0, 0.6), 0 0 35px rgba(229, 142, 0, 0.14);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    position: relative;
+    overflow: hidden;
+}
+
+.maintenance-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #e58e00, #ffc107, #ff9800, #e58e00);
+    background-size: 200% auto;
+    animation: shimmer 3s linear infinite;
+}
+
+.maintenance-logo-wrap {
+    position: relative;
+    display: inline-block;
+}
+
+.maintenance-logo-glow {
+    filter: drop-shadow(0 0 18px rgba(229, 142, 0, 0.55));
+    animation: pulse-glow 3s infinite ease-in-out;
+}
+
+.timer-unit-box {
+    background: rgba(229, 142, 0, 0.08);
+    border: 1px solid rgba(229, 142, 0, 0.28);
+    border-radius: 14px;
+    padding: 16px 8px;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.timer-unit-box:hover {
+    transform: translateY(-2px);
+    border-color: rgba(229, 142, 0, 0.55);
+    box-shadow: 0 6px 20px rgba(229, 142, 0, 0.15);
+}
+
+.timer-number {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 2.6rem;
+    line-height: 1.05;
+    font-weight: 700;
+    color: #ffb433;
+    text-shadow: 0 0 18px rgba(229, 142, 0, 0.45);
+}
+
+@media (max-width: 576px) {
+    .timer-number {
+        font-size: 1.9rem;
+    }
+    .timer-unit-box {
+        padding: 12px 6px;
+    }
+}
+
+.timer-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-top: 6px;
+}
+
+.maintenance-task-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 10px 14px;
+    transition: all 0.2s ease;
+}
+
+.maintenance-task-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(229, 142, 0, 0.35);
+}
